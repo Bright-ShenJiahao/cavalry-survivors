@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>单骑：七进七出 · 原型</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:none;-webkit-user-select:none;user-select:none;font-family:system-ui,sans-serif}
+canvas{display:block;position:fixed;inset:0;width:100vw;height:100vh}
+#dbg{position:fixed;top:6px;right:6px;z-index:2;background:rgba(0,0,0,.62);color:#fff;font-size:12px;border-radius:6px;width:220px;display:none;max-height:calc(100vh - 12px);overflow:auto}
+#dbg .hd{padding:6px 8px;font-weight:bold;cursor:pointer;display:flex;justify-content:space-between}
+#dbg .bd{padding:0 8px 8px}
+#dbg label{display:block;margin:4px 0}
+#dbg .t{display:flex;justify-content:space-between}
+#dbg input[type=range]{width:100%;margin:2px 0}
+#dbg button{margin-top:4px;width:100%;padding:4px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="dbg"><div class="hd" id="dbgHd"><span>调试面板</span><span id="dbgArrow">▲</span></div><div class="bd" id="dbgBd"></div></div>
+<script>
+'use strict';
+const FORCE_DEBUG = false;
+const DEBUG = FORCE_DEBUG || new URLSearchParams(location.search).has('debug');
+
+// ===== 可调参数 =====
+const P = {
+  maxSpeed: 420,     // 最高速度 px/s
+  accel: 300,        // 加速度 px/s²
+  brake: 700,        // 刹车减速度
+  coast: 110,        // 松手滑行减速度
+  turnRate: 3.6,     // 静止时的转向速度 rad/s
+  turnSpeedFx: 0.75, // 速度对转向的影响：满速时转向速度 = turnRate × (1 - 此值)
+  dmgMin: 0.5,       // 0 速伤害倍率
+  dmgMax: 2,         // 满速伤害倍率
+  charge: 0.7,       // 撞飞阈值（速度比例）
+  slashBase: 12,     // 挥砍基础伤害
+  ramBase: 25,       // 冲撞基础伤害
+  spawnMul: 1,       // 刷怪倍率
+  zoom: 1,           // 镜头缩放倍率
+  god: false,        // 无敌
+};
+const SLIDERS = [
+  ['maxSpeed', '最高速度', 150, 900, 10],
+  ['accel', '加速度', 50, 1200, 10],
+  ['brake', '刹车力度', 100, 2000, 10],
+  ['turnRate', '转向速度', 0.5, 8, 0.1],
+  ['turnSpeedFx', '速度对转向的影响', 0, 0.95, 0.01],
+  ['dmgMin', '0速伤害倍率', 0.1, 2, 0.05],
+  ['dmgMax', '满速伤害倍率', 1, 5, 0.1],
+  ['charge', '撞飞速度阈值', 0.3, 1, 0.01],
+  ['spawnMul', '刷怪倍率', 0, 4, 0.1],
+  ['zoom', '镜头缩放', 0.5, 2, 0.05],
+];
+
+const WORLD = 4000;
+const TAU = Math.PI * 2;
+const wrap = a => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;
+const rand = (a, b) => a + Math.random() * (b - a);
+
+// ===== 画布 =====
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+let W, H, DPR;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+}
+addEventListener('resize', resize); resize();
+const baseZoom = () => Math.max(0.5, Math.min(1.2, Math.min(W, H) / 650)) * P.zoom;
+
+// ===== 状态 =====
+let S;
+function reset() {
+  S = {
+    t: 0, kills: 0, hp: 100, dead: false,
+    h: { x: WORLD / 2, y: WORLD / 2, a: -Math.PI / 2, v: 0 },
+    en: [], nums: [], dust: [], slashT: 0, slashAnim: 0,
+    spawnAcc: 0, bruteT: 15, cam: { x: WORLD / 2, y: WORLD / 2 },
+  };
+}
+reset();
+
+// ===== 输入 =====
+const keys = {};
+addEventListener('keydown', e => { keys[e.code] = true; if (S.dead && (e.code === 'Space' || e.code === 'Enter')) reset(); });
+addEventListener('keyup', e => { keys[e.code] = false; });
+const joy = { on: false, id: null, bx: 0, by: 0, x: 0, y: 0, R: 60 };
+cv.addEventListener('pointerdown', e => {
+  if (S.dead) { reset(); return; }
+  joy.on = true; joy.id = e.pointerId; joy.bx = joy.x = e.clientX; joy.by = joy.y = e.clientY;
+  cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointermove', e => { if (joy.on && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; } });
+const joyEnd = e => { if (e.pointerId === joy.id) { joy.on = false; joy.id = null; } };
+cv.addEventListener('pointerup', joyEnd); cv.addEventListener('pointercancel', joyEnd);
+
+function getInput() {
+  let x = 0, y = 0;
+  if (keys.KeyA || keys.ArrowLeft) x--;
+  if (keys.KeyD || keys.ArrowRight) x++;
+  if (keys.KeyW || keys.ArrowUp) y--;
+  if (keys.KeyS || keys.ArrowDown) y++;
+  const m = Math.hypot(x, y);
+  if (m > 0) return { x: x / m, y: y / m, m: 1 };
+  if (joy.on) {
+    const dx = joy.x - joy.bx, dy = joy.y - joy.by, d = Math.hypot(dx, dy);
+    if (d < 8) return { m: 0 };
+    return { x: dx / d, y: dy / d, m: Math.min(1, d / joy.R) };
+  }
+  return { m: 0 };
+}
+
+// ===== 马 =====
+const speedRatio = () => Math.min(1, S.h.v / P.maxSpeed);
+const mult = () => P.dmgMin + (P.dmgMax - P.dmgMin) * speedRatio();
+let braking = false;
+
+function updHorse(dt) {
+  const h = S.h, inp = getInput(), vmax = P.maxSpeed;
+  const omega = P.turnRate * (1 - P.turnSpeedFx * speedRatio());
+  braking = false;
+  if (inp.m > 0.1) {
+    const d = wrap(Math.atan2(inp.y, inp.x) - h.a);
+    if (Math.abs(d) > 2.0 && h.v > vmax * 0.25) {
+      // 往背后推：先刹车
+      h.v = Math.max(0, h.v - P.brake * dt); braking = true;
+    } else {
+      const tv = inp.m * vmax;
+      if (h.v < tv) h.v = Math.min(tv, h.v + P.accel * dt);
+      else h.v = Math.max(tv, h.v - P.coast * dt);
+    }
+    const step = omega * dt;
+    h.a = wrap(h.a + (Math.abs(d) < step ? d : Math.sign(d) * step));
+  } else {
+    h.v = Math.max(0, h.v - P.coast * dt);
+  }
+  h.v = Math.min(h.v, vmax);
+  h.x += Math.cos(h.a) * h.v * dt;
+  h.y += Math.sin(h.a) * h.v * dt;
+  const m = 30;
+  if (h.x < m || h.x > WORLD - m || h.y < m || h.y > WORLD - m) {
+    h.x = Math.max(m, Math.min(WORLD - m, h.x));
+    h.y = Math.max(m, Math.min(WORLD - m, h.y));
+    h.v *= 0.9;
+  }
+  // 扬尘
+  if (h.v > vmax * 0.45 && Math.random() < 0.6) {
+    S.dust.push({ x: h.x - Math.cos(h.a) * 20 + rand(-6, 6), y: h.y - Math.sin(h.a) * 20 + rand(-6, 6), t: 0.5, r: rand(3, 6) });
+  }
+}
+
+// ===== 敌人 =====
+function spawn(type) {
+  const z = baseZoom();
+  const dist = Math.hypot(W, H) / z / 2 + 60;
+  const ang = Math.random() * TAU;
+  const x = Math.max(20, Math.min(WORLD - 20, S.h.x + Math.cos(ang) * dist));
+  const y = Math.max(20, Math.min(WORLD - 20, S.h.y + Math.sin(ang) * dist));
+  if (type === 'brute') S.en.push({ type, x, y, r: 20, hp: 220, max: 220, sp: 45, cd: 0, flash: 0, fly: 0 });
+  else S.en.push({ type: 'grunt', x, y, r: 9, hp: 20, max: 20, sp: rand(60, 85), cd: 0, flash: 0, fly: 0 });
+}
+
+function addNum(x, y, v, crit) {
+  if (S.nums.length > 220) S.nums.shift();
+  S.nums.push({ x: x + rand(-6, 6), y: y - 10, txt: String(Math.round(v)), t: 0.8, crit });
+}
+
+function hit(e, dmg, kx, ky, kp) {
+  if (e.dead) return;
+  e.hp -= dmg; e.flash = 0.1;
+  addNum(e.x, e.y, dmg, dmg >= 30);
+  if (e.hp <= 0) {
+    e.dead = true; S.kills++;
+    e.fly = kp > 500 ? 0.7 : 0.4;
+    e.fvx = kx * kp + rand(-80, 80); e.fvy = ky * kp + rand(-80, 80);
+    e.spin = rand(-14, 14); e.rot = 0;
+  }
+}
+
+const grid = new Map();
+const CELL = 40;
+function updEnemies(dt) {
+  const h = S.h;
+  // 刷怪
+  S.spawnAcc += (1.5 + S.t * 0.06) * P.spawnMul * dt;
+  while (S.spawnAcc >= 1) { S.spawnAcc--; if (S.en.length < 550) spawn('grunt'); }
+  S.bruteT -= dt;
+  if (S.bruteT <= 0) { S.bruteT = Math.max(6, 20 - S.t * 0.05); if (P.spawnMul > 0) spawn('brute'); }
+
+  grid.clear();
+  for (const e of S.en) {
+    if (e.dead) continue;
+    const k = ((e.x / CELL) | 0) * 1000 + ((e.y / CELL) | 0);
+    let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(e);
+  }
+  const hx = h.x + Math.cos(h.a) * 8, hy = h.y + Math.sin(h.a) * 8, HR = 20;
+  const r = speedRatio(), m = mult();
+  const fx = Math.cos(h.a), fy = Math.sin(h.a);
+
+  for (const e of S.en) {
+    if (e.flash > 0) e.flash -= dt;
+    if (e.dead) {
+      e.fly -= dt; e.x += e.fvx * dt; e.y += e.fvy * dt;
+      e.fvx *= 0.94; e.fvy *= 0.94; e.rot += e.spin * dt;
+      continue;
+    }
+    if (e.cd > 0) e.cd -= dt;
+    // 追马
+    let dx = h.x - e.x, dy = h.y - e.y, d = Math.hypot(dx, dy) || 1;
+    let mx = dx / d * e.sp, my = dy / d * e.sp;
+    // 分离
+    const cx = (e.x / CELL) | 0, cy = (e.y / CELL) | 0;
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      const a = grid.get((cx + i) * 1000 + cy + j); if (!a) continue;
+      for (const o of a) {
+        if (o === e) continue;
+        const ox = e.x - o.x, oy = e.y - o.y, od = Math.hypot(ox, oy), rr = e.r + o.r;
+        if (od > 0 && od < rr) { const p = (rr - od) / rr * 120; mx += ox / od * p; my += oy / od * p; }
+      }
+    }
+    e.x += mx * dt; e.y += my * dt;
+
+    // 与马碰撞
+    dx = e.x - hx; dy = e.y - hy; d = Math.hypot(dx, dy) || 1;
+    const rr = HR + e.r;
+    if (d < rr) {
+      const nx = dx / d, ny = dy / d;
+      if (e.type === 'grunt') {
+        if (r >= P.charge) {
+          hit(e, P.ramBase * m, fx * 0.7 + nx * 0.6, fy * 0.7 + ny * 0.6, h.v * 1.3 + 250);
+          h.v *= 0.99;
+          if (!e.dead) { e.x = hx + nx * rr; e.y = hy + ny * rr; }
+        } else {
+          e.x = hx + nx * rr; e.y = hy + ny * rr;
+          if (e.cd <= 0) { h.v = Math.max(0, h.v - P.maxSpeed * 0.04); e.cd = 0.3; }
+        }
+      } else {
+        if (e.cd <= 0) {
+          hit(e, P.ramBase * m, nx, ny, 300);
+          if (r > 0.3) addNum(h.x, h.y - 20, 0, false), S.nums[S.nums.length - 1].txt = '掉速!';
+          h.v *= 0.3; e.cd = 0.6;
+        }
+        // 大怪不动，马被弹开
+        h.x -= nx * (rr - d); h.y -= ny * (rr - d);
+      }
+    }
+    // 敌人对马的伤害
+    if (!e.dead && !P.god) {
+      const pd = Math.hypot(e.x - h.x, e.y - h.y);
+      if (pd < HR + e.r + 4) S.hp -= (e.type === 'brute' ? 20 : 5) * dt;
+    }
+  }
+  S.en = S.en.filter(e => !e.dead || e.fly > 0);
+  if (S.hp <= 0) { S.hp = 0; S.dead = true; }
+}
+
+// ===== 自动挥砍 =====
+const SLASH_R = 75;
+function updSlash(dt) {
+  if (S.slashAnim > 0) S.slashAnim -= dt;
+  S.slashT -= dt;
+  if (S.slashT > 0) return;
+  const h = S.h, m = mult();
+  let any = false;
+  for (const e of S.en) {
+    if (e.dead) continue;
+    const dx = e.x - h.x, dy = e.y - h.y, d = Math.hypot(dx, dy);
+    if (d < SLASH_R + e.r) { any = true; hit(e, P.slashBase * m, dx / (d || 1), dy / (d || 1), 220); }
+  }
+  if (any) { S.slashT = 0.55; S.slashAnim = 0.18; }
+}
+
+// ===== 绘制 =====
+function hash(x, y) { let n = x * 374761393 + y * 668265263; n = (n ^ (n >> 13)) * 1274126177; return ((n ^ (n >> 16)) >>> 0) / 4294967296; }
+
+function drawGround(z) {
+  const vw = W / z, vh = H / z, x0 = S.cam.x - vw / 2, y0 = S.cam.y - vh / 2;
+  ctx.fillStyle = '#2d2a24'; ctx.fillRect(x0, y0, vw, vh);
+  ctx.fillStyle = '#6f8f4a'; ctx.fillRect(0, 0, WORLD, WORLD);
+  // 大色块
+  const B = 400;
+  for (let i = Math.floor(x0 / B); i <= Math.floor((x0 + vw) / B); i++)
+    for (let j = Math.floor(y0 / B); j <= Math.floor((y0 + vh) / B); j++) {
+      if (i < 0 || j < 0 || i * B >= WORLD || j * B >= WORLD) continue;
+      const hv = hash(i, j);
+      if (hv < 0.5) {
+        ctx.fillStyle = hv < 0.25 ? 'rgba(60,80,30,.35)' : 'rgba(150,140,80,.25)';
+        ctx.beginPath(); ctx.ellipse(i * B + 200 + (hash(i + 7, j) - .5) * 150, j * B + 200 + (hash(i, j + 7) - .5) * 150, 120 + hv * 200, 80 + hash(j, i) * 120, hv * 6, 0, TAU); ctx.fill();
+      }
+    }
+  // 网格线
+  ctx.strokeStyle = 'rgba(0,0,0,.07)'; ctx.lineWidth = 2; ctx.beginPath();
+  const G = 160;
+  for (let x = Math.max(0, Math.floor(x0 / G) * G); x <= Math.min(WORLD, x0 + vw); x += G) { ctx.moveTo(x, Math.max(0, y0)); ctx.lineTo(x, Math.min(WORLD, y0 + vh)); }
+  for (let y = Math.max(0, Math.floor(y0 / G) * G); y <= Math.min(WORLD, y0 + vh); y += G) { ctx.moveTo(Math.max(0, x0), y); ctx.lineTo(Math.min(WORLD, x0 + vw), y); }
+  ctx.stroke();
+  // 草丛和石子
+  const C = 70;
+  ctx.lineWidth = 2;
+  for (let i = Math.floor(x0 / C); i <= Math.floor((x0 + vw) / C); i++)
+    for (let j = Math.floor(y0 / C); j <= Math.floor((y0 + vh) / C); j++) {
+      if (i < 0 || j < 0 || i * C >= WORLD || j * C >= WORLD) continue;
+      const hv = hash(i + 99, j + 31), px = i * C + hash(i, j + 3) * C, py = j * C + hash(i + 5, j) * C;
+      if (hv < 0.3) {
+        ctx.strokeStyle = '#4f6e30'; ctx.beginPath();
+        ctx.moveTo(px - 4, py); ctx.lineTo(px - 6, py - 7); ctx.moveTo(px, py); ctx.lineTo(px, py - 9); ctx.moveTo(px + 4, py); ctx.lineTo(px + 6, py - 7);
+        ctx.stroke();
+      } else if (hv < 0.36) {
+        ctx.fillStyle = '#8c8a7a'; ctx.beginPath(); ctx.ellipse(px, py, 5, 3.5, 0, 0, TAU); ctx.fill();
+      } else if (hv < 0.39) {
+        ctx.fillStyle = '#d9c96a'; ctx.beginPath(); ctx.arc(px, py, 2.5, 0, TAU); ctx.fill();
+      }
+    }
+  // 边界
+  ctx.strokeStyle = '#3b2f1e'; ctx.lineWidth = 12; ctx.strokeRect(0, 0, WORLD, WORLD);
+}
+
+function drawHorse() {
+  const h = S.h, r = speedRatio();
+  ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(h.a);
+  // 冲锋光环
+  if (r >= P.charge) {
+    ctx.fillStyle = `rgba(255,140,40,${0.25 + 0.2 * Math.sin(S.t * 30)})`;
+    ctx.beginPath(); ctx.moveTo(38, 0); ctx.lineTo(14, -20); ctx.lineTo(14, 20); ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(2, 4, 26, 12, 0, 0, TAU); ctx.fill();
+  // 马身
+  ctx.fillStyle = '#e8e2d6'; ctx.strokeStyle = '#5a4a3a'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(0, 0, 22, 10, 0, 0, TAU); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(23, 0, 9, 6, 0, 0, TAU); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#5a4a3a'; ctx.fillRect(-26, -2, 6, 4); // 尾巴
+  // 骑手
+  ctx.fillStyle = '#f5f5f5'; ctx.strokeStyle = '#2a5db0'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(-2, 0, 8, 0, TAU); ctx.fill(); ctx.stroke();
+  // 枪
+  ctx.strokeStyle = '#ccc'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-6, 6); ctx.lineTo(30, 12); ctx.stroke();
+  ctx.restore();
+  // 挥砍
+  if (S.slashAnim > 0) {
+    const k = S.slashAnim / 0.18;
+    ctx.strokeStyle = `rgba(255,255,255,${k * 0.8})`; ctx.lineWidth = 5;
+    const st = h.a + (1 - k) * TAU;
+    ctx.beginPath(); ctx.arc(h.x, h.y, SLASH_R, st - 1.5, st); ctx.stroke();
+    ctx.strokeStyle = `rgba(255,255,255,${k * 0.15})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(h.x, h.y, SLASH_R, 0, TAU); ctx.stroke();
+  }
+}
+
+function drawEnemies() {
+  for (const e of S.en) {
+    ctx.save(); ctx.translate(e.x, e.y);
+    if (e.dead) { ctx.rotate(e.rot); ctx.globalAlpha = Math.max(0, Math.min(1, e.fly * 3)); }
+    ctx.fillStyle = e.flash > 0 ? '#fff' : (e.type === 'brute' ? '#5b3a6e' : '#b8432f');
+    ctx.strokeStyle = '#2a1410'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, e.r, 0, TAU); ctx.fill(); ctx.stroke();
+    if (e.type === 'grunt') { ctx.fillStyle = '#e8c34a'; ctx.fillRect(-e.r, -3, e.r * 2, 3); }
+    ctx.restore();
+    if (e.type === 'brute' && !e.dead) {
+      ctx.fillStyle = '#000'; ctx.fillRect(e.x - 20, e.y - 30, 40, 5);
+      ctx.fillStyle = '#e44'; ctx.fillRect(e.x - 20, e.y - 30, 40 * e.hp / e.max, 5);
+    }
+  }
+}
+
+function drawFx(dt) {
+  for (const d of S.dust) { d.t -= dt; ctx.fillStyle = `rgba(200,180,130,${d.t})`; ctx.beginPath(); ctx.arc(d.x, d.y, d.r * (1.5 - d.t), 0, TAU); ctx.fill(); }
+  S.dust = S.dust.filter(d => d.t > 0);
+  ctx.textAlign = 'center'; ctx.lineWidth = 3;
+  for (const n of S.nums) {
+    n.t -= dt; n.y -= 40 * dt;
+    ctx.globalAlpha = Math.min(1, n.t * 2.5);
+    ctx.font = `bold ${n.crit ? 20 : 14}px system-ui,sans-serif`;
+    ctx.strokeStyle = '#000'; ctx.strokeText(n.txt, n.x, n.y);
+    ctx.fillStyle = n.txt === '掉速!' ? '#7cf' : (n.crit ? '#ffb030' : '#fff'); ctx.fillText(n.txt, n.x, n.y);
+  }
+  ctx.globalAlpha = 1;
+  S.nums = S.nums.filter(n => n.t > 0);
+}
+
+function drawHUD() {
+  const r = speedRatio(), m = mult();
+  // 速度条
+  const bw = Math.min(420, W * 0.6), bx = (W - bw) / 2, by = H - 30, bh = 14;
+  ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(bx - 3, by - 3, bw + 6, bh + 6);
+  const col = r >= P.charge ? '#ff7a2a' : (r > 0.4 ? '#f2c94c' : '#9aa');
+  ctx.fillStyle = col; ctx.fillRect(bx, by, bw * r, bh);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx + bw * P.charge, by - 3); ctx.lineTo(bx + bw * P.charge, by + bh + 3); ctx.stroke();
+  ctx.font = 'bold 14px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#000';
+  const label = `速度 ${Math.round(r * 100)}%   伤害 ×${m.toFixed(2)}${r >= P.charge ? '   冲锋！' : ''}${braking ? '   刹车' : ''}`;
+  ctx.strokeText(label, W / 2, by - 8); ctx.fillStyle = '#fff'; ctx.fillText(label, W / 2, by - 8);
+  // 左上信息
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(10, 10, 154, 12);
+  ctx.fillStyle = P.god ? '#6cf' : '#e33'; ctx.fillRect(12, 12, 150 * S.hp / 100, 8);
+  const mm = Math.floor(S.t / 60), ss = Math.floor(S.t % 60);
+  const info = `${mm}:${String(ss).padStart(2, '0')}   击杀 ${S.kills}   敌人 ${S.en.length}`;
+  ctx.font = 'bold 13px system-ui,sans-serif';
+  ctx.strokeText(info, 10, 40); ctx.fillStyle = '#fff'; ctx.fillText(info, 10, 40);
+  if (H > W) { ctx.fillStyle = '#ffd'; ctx.fillText('建议横屏', 10, 60); }
+  // 摇杆
+  if (joy.on) {
+    const dx = joy.x - joy.bx, dy = joy.y - joy.by, d = Math.hypot(dx, dy), k = d > joy.R ? joy.R / d : 1;
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(joy.bx, joy.by, joy.R, 0, TAU); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.5)';
+    ctx.beginPath(); ctx.arc(joy.bx + dx * k, joy.by + dy * k, 24, 0, TAU); ctx.fill();
+  }
+  if (S.dead) {
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
+    ctx.font = 'bold 30px system-ui,sans-serif'; ctx.fillText('力竭落马', W / 2, H / 2 - 20);
+    ctx.font = '16px system-ui,sans-serif';
+    ctx.fillText(`存活 ${mm}:${String(ss).padStart(2, '0')}   击杀 ${S.kills}`, W / 2, H / 2 + 14);
+    ctx.fillText('点击屏幕 / 按空格 重新开始', W / 2, H / 2 + 42);
+  }
+}
+
+// ===== 主循环 =====
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!S.dead) { S.t += dt; updHorse(dt); updEnemies(dt); updSlash(dt); }
+  const h = S.h, z = baseZoom();
+  // 镜头：跟随并略微看向前方
+  const look = 0.35 * h.v;
+  const tx = h.x + Math.cos(h.a) * look, ty = h.y + Math.sin(h.a) * look;
+  const k = 1 - Math.exp(-5 * dt);
+  S.cam.x += (tx - S.cam.x) * k; S.cam.y += (ty - S.cam.y) * k;
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.save();
+  ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-S.cam.x, -S.cam.y);
+  drawGround(z);
+  drawEnemies();
+  drawHorse();
+  drawFx(S.dead ? 0 : dt);
+  ctx.restore();
+  drawHUD();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ===== 调试面板 =====
+if (DEBUG) {
+  const box = document.getElementById('dbg'), bd = document.getElementById('dbgBd');
+  box.style.display = 'block';
+  for (const [key, name, min, max, step] of SLIDERS) {
+    const l = document.createElement('label');
+    l.innerHTML = `<div class="t"><span>${name}</span><span id="v_${key}">${P[key]}</span></div><input type="range" min="${min}" max="${max}" step="${step}" value="${P[key]}">`;
+    l.querySelector('input').addEventListener('input', ev => { P[key] = +ev.target.value; document.getElementById('v_' + key).textContent = P[key]; });
+    bd.appendChild(l);
+  }
+  const g = document.createElement('label');
+  g.innerHTML = '<input type="checkbox"> 无敌';
+  g.querySelector('input').addEventListener('change', ev => { P.god = ev.target.checked; });
+  bd.appendChild(g);
+  const b = document.createElement('button'); b.textContent = '重新开始'; b.onclick = reset; bd.appendChild(b);
+  const c = document.createElement('button'); c.textContent = '复制当前参数';
+  c.onclick = () => { const t = JSON.stringify(P); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => c.textContent = '已复制', () => prompt('复制参数：', t)); };
+  bd.appendChild(c);
+  let open = innerWidth > 1000;
+  const setOpen = () => { bd.style.display = open ? 'block' : 'none'; document.getElementById('dbgArrow').textContent = open ? '▲' : '▼'; };
+  document.getElementById('dbgHd').onclick = () => { open = !open; setOpen(); };
+  setOpen();
+}
+</script>
+</body>
+</html>
