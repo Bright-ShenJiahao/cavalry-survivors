@@ -68,6 +68,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:n
 </div>
 <div id="dbg"><div class="hd" id="dbgHd"><span>调试面板</span><span id="dbgArrow">▲</span></div><div class="bd" id="dbgBd"></div></div>
 <script src="assets/horse8/meta.js"></script>
+<script src="assets/rider/meta.js"></script>
 <script>
 'use strict';
 const FORCE_DEBUG = false;
@@ -892,6 +893,8 @@ function horseImg(key, tint) {
   } catch (e) { H8.tint[id] = null; }
   return H8.tint[id] || im;
 }
+const RIDER_IMG = {};
+for (const u of ['hero', 'guard', 'cav']) for (const d of ['E', 'SE', 'S', 'NE', 'N']) { const im = new Image(); im.src = `assets/rider/${u}_${d}.png`; RIDER_IMG[u + d] = im; }
 const H8_SECT = [['E', 1], ['SE', 1], ['S', 1], ['SE', -1], ['E', -1], ['NE', -1], ['N', 1], ['NE', 1]];
 // 画一匹 8 方向马 + 简单骑手。rd: {body, ring, lance}
 function riderH8(o, tint, rd) {
@@ -908,6 +911,12 @@ function riderH8(o, tint, rd) {
   const p = P3(o.x, o.y, o.z || 0), w = F.w * HS, h = F.h * HS, up = F.up * HS;
   const seatX = p[0] + F.sx * HS * flip, seatY = p[1] - up + F.sy * HS;
   const rider = () => {
+    const ri = RIDER_IMG[rd.key + dn], RM = window.RIDERS && RIDERS[rd.key] && RIDERS[rd.key][['E', 'SE', 'S', 'NE', 'N'].indexOf(dn)];
+    if (ready(ri) && RM) {   // 骑手图：坐骨对准马鞍
+      ctx.save(); ctx.translate(seatX, seatY + 2); if (flip < 0) ctx.scale(-1, 1);
+      ctx.drawImage(ri, -RM.ax, -RM.ay, RM.w, RM.h); ctx.restore();
+      return;
+    }
     // 简单骑手：躯干 + 头 + 长枪（指向奔跑方向）
     ctx.lineCap = 'round';
     seg([seatX, seatY], [seatX, seatY - 13], 9, '#1a1410'); seg([seatX, seatY], [seatX, seatY - 13], 6.5, rd.body);
@@ -921,17 +930,20 @@ function riderH8(o, tint, rd) {
   ctx.save();
   if (o.dead) ctx.globalAlpha = clamp(o.fly * 3, 0, 1);
   if (o.flash > 0) ctx.globalAlpha *= 0.45;
-  if (dn === 'S') rider();                       // 正面朝镜头：人在马头后面
-  ctx.save(); ctx.translate(p[0], p[1] - up); if (flip < 0) ctx.scale(-1, 1);
-  ctx.drawImage(im, -w / 2, -h, w, h); ctx.restore();
-  if (dn !== 'S') rider();
+  const horse = () => { ctx.save(); ctx.translate(p[0], p[1] - up); if (flip < 0) ctx.scale(-1, 1); ctx.drawImage(im, -w / 2, -h, w, h); ctx.restore(); };
+  if (dn === 'S' || dn === 'SE') { rider(); horse(); }   // 朝镜头：马头挡在人前面
+  else if (dn === 'N') { horse(); rider(); }            // 背对镜头：人整个压在马屁股上方
+  else {   // 侧面/背面：先画马，再只画人腰部以上（枪露出来，腿藏在马身后）
+    horse();
+    ctx.save(); ctx.beginPath(); ctx.rect(seatX - 80, seatY - 80, 160, 80 + 6); ctx.clip(); rider(); ctx.restore();
+  }
   ctx.restore();
   return true;
 }
 function HORSEMETA(di, fi) { return window.HORSE8 && HORSE8.frames[di] && HORSE8.frames[di][fi]; }
-const RD_HERO = { body: '#f2f2f2', ring: '#222', lance: '#d0d0d0', head: '#e8c49a' };
-const RD_GUARD = { body: '#3a5fc8', ring: '#b8bcc4' };
-const RD_CAV = { body: '#b8322a', ring: '#c0a040' };
+const RD_HERO = { key: 'hero', body: '#f2f2f2', ring: '#222', lance: '#d0d0d0', head: '#e8c49a' };
+const RD_GUARD = { key: 'guard', body: '#3a5fc8', ring: '#b8bcc4' };
+const RD_CAV = { key: 'cav', body: '#b8322a', ring: '#c0a040' };
 
 function draw3(dt) {
   drawDust(dt, true);
