@@ -77,6 +77,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:n
 <script src="assets/spara/meta.js"></script>
 <script src="assets/immortal/meta.js"></script>
 <script src="assets/props/meta.js"></script>
+<script src="src/run.js"></script>
 <script>
 'use strict';
 const FORCE_DEBUG = false;
@@ -110,6 +111,7 @@ const P = {
   art: new URLSearchParams(location.search).get('art') || 'retro', // 美术风格：blocks / cartoon / retro / fine
   terrain: true,     // 地形开关
   props: true,       // 地面摆件（栅栏/营帐/草丛/石头…）
+  xpNeed: 1,         // 升级所需经验倍率
   slopeK: 900,       // 坡度影响（下坡加速/上坡减速）
   mudMul: 0.5,       // 泥地速度倍率
   view25: true,      // 2.5D 视角
@@ -135,6 +137,7 @@ const SLIDERS = [
   ['squash', '2.5D 压扁比例', 0.4, 1, 0.02],
   ['slopeK', '坡度影响', 0, 2000, 50],
   ['mudMul', '泥地速度倍率', 0.2, 1, 0.05],
+  ['xpNeed', '升级所需经验倍率', 0.2, 3, 0.1],
 ];
 
 const WORLD = 4000;
@@ -349,6 +352,7 @@ function reset(demo) {
     boss: null, won: false, msg: '', msgT: 0, demo: !!demo, demoA: 0,
   };
   setGuards(P.guards);
+  runReset();
 }
 reset();
 
@@ -394,8 +398,8 @@ function rawInput() {
 // ===== 骑乘物理（主角、亲卫、敌骑共用） =====
 const ratio = o => Math.min(1.3, o.v / P.maxSpeed);
 const mult = o => P.dmgMin + (P.dmgMax - P.dmgMin) * ratio(o);
-const qLeader = () => ({ max: P.maxSpeed, accel: P.accel, brake: P.brake, coast: P.coast, turn: P.turnRate, fx: P.turnSpeedFx });
-const qGuard = () => ({ max: P.maxSpeed * 1.15, accel: P.accel * 1.3, brake: P.brake, coast: P.coast, turn: P.turnRate * 1.15, fx: P.turnSpeedFx });
+const qLeader = () => ({ max: P.maxSpeed * runSpd(), accel: P.accel * runAcc(), brake: P.brake, coast: P.coast, turn: P.turnRate * runTurn(), fx: P.turnSpeedFx });
+const qGuard = () => ({ max: P.maxSpeed * 1.15 * runSpd(), accel: P.accel * 1.3 * runAcc(), brake: P.brake, coast: P.coast, turn: P.turnRate * 1.15 * runTurn(), fx: P.turnSpeedFx });
 const qCav = () => ({ max: P.maxSpeed * 0.85, accel: P.accel * 0.7, brake: P.brake * 0.6, coast: P.coast, turn: P.turnRate * 0.6, fx: P.turnSpeedFx });
 
 function steer(o, dx, dy, m, dt, q) {
@@ -537,10 +541,11 @@ function addNum(x, y, txt, col, big) {
 const GRAV = 1400;
 function hit(e, dmg, kx, ky, kp) {
   if (e.dead) return;
+  dmg *= runAtk();
   e.hp -= dmg; e.flash = 0.1;
   addNum(e.x, e.y, Math.round(dmg), dmg >= 30 ? '#ffb030' : '#fff', dmg >= 30);
   if (e.hp <= 0) {
-    e.dead = true; S.kills++;
+    e.dead = true; S.kills++; runKill(e);
     if (e.type === 'dar') { S.won = true; S.wonT = S.t; }
     if (e.type === 'dar' || e.type === 'pha') kp = Math.min(kp, 300);
     e.fly = kp > 450 ? 0.7 : 0.4;
@@ -741,7 +746,7 @@ function slash(rd, R, base, dt) {
 }
 function updSlash(dt) {
   slash(S.h, SLASH_R, P.slashBase, dt);
-  for (const g of S.g) slash(g, GSLASH_R, P.slashBase * 0.6, dt);
+  for (const g of S.g) slash(g, GSLASH_R, P.slashBase * 0.6 * runElite(), dt);
 }
 
 // ===== 绘制 =====
@@ -1182,6 +1187,7 @@ function drawDebris(dt) {
 function draw3(dt) {
   for (const p of S.pv) if (p.pr) propDraw(p);
   for (const p of S.pv) if (p.flat && !p.pr) propDraw(p);
+  runDrawGround();
   drawDust(dt, true);
   for (const g of S.g) drawSlash3(g, GSLASH_R);
   drawSlash3(S.h, SLASH_R);
@@ -1219,6 +1225,7 @@ function draw3(dt) {
       else if (!o.dead && o.hp < o.max) bar3(o, 26, 50, '#e44');
     } else { drawFoot3(o); if (o.type === 'brute' && !o.dead) bar3(o, 40, 56, '#e44'); }
   }
+  runDrawFx();
   drawDebris(dt);
   drawNums(dt, true);
 }
@@ -1239,8 +1246,8 @@ function drawHUD() {
   const info = `${mm}:${String(ss).padStart(2, '0')}   击杀 ${S.kills}   亲卫 ${S.g.length}   敌人 ${S.en.length}`;
   ctx.font = 'bold 13px system-ui,sans-serif';
   ctx.strokeText(info, 10, 40); ctx.fillStyle = '#fff'; ctx.fillText(info, 10, 40);
-  if (S.t >= P.cavStart && S.t < P.cavStart + 3) { ctx.fillStyle = '#ff6040'; ctx.strokeText('敌军骑兵来袭！', 10, 60); ctx.fillText('敌军骑兵来袭！', 10, 60); }
-  else if (H > W) { ctx.fillStyle = '#ffd'; ctx.fillText('建议横屏', 10, 60); }
+  if (S.t >= P.cavStart && S.t < P.cavStart + 3) { ctx.fillStyle = '#ff6040'; ctx.strokeText('敌军骑兵来袭！', 10, 92); ctx.fillText('敌军骑兵来袭！', 10, 92); }
+  else if (H > W) { ctx.fillStyle = '#ffd'; ctx.fillText('建议横屏', 10, 92); }
   if (joy.on) {
     const dx = joy.x - joy.bx, dy = joy.y - joy.by, d = Math.hypot(dx, dy), k = d > joy.R ? joy.R / d : 1;
     ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 3;
@@ -1248,6 +1255,7 @@ function drawHUD() {
     ctx.fillStyle = 'rgba(255,255,255,.5)';
     ctx.beginPath(); ctx.arc(joy.bx + dx * k, joy.by + dy * k, 24, 0, TAU); ctx.fill();
   }
+  runHUD();
   // Boss 血条与提示
   const dar = S.boss && S.en.find(e => e.type === 'dar');
   if (dar) {
@@ -1287,7 +1295,7 @@ function drawHUD() {
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (!S.dead && !S.won) { S.t += dt; updBoss(dt); updRiders(dt); updEnemies(dt); updSlash(dt); }
+  if (!S.dead && !S.won && !S.paused) { S.t += dt; updBoss(dt); updRiders(dt); updEnemies(dt); updSlash(dt); runUpdate(dt); }
   const h = S.h, z = baseZoom();
   // 镜头：前瞻慢慢偏过去 + 死区 + 柔和跟随（减少晕眩）
   if (!S.look) S.look = { x: 0, y: 0 };
@@ -1304,7 +1312,7 @@ function frame(now) {
   }
 
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  const fdt = S.dead || S.won ? 0 : dt;
+  const fdt = S.dead || S.won || S.paused ? 0 : dt;
   if (P.view25) {
     SQ = P.squash;
     ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z * SQ); ctx.translate(-S.cam.x, -S.cam.y);
@@ -1414,6 +1422,8 @@ if (DEBUG) {
   bd.appendChild(g);
   const b = document.createElement('button'); b.textContent = '重新开始'; b.onclick = reset; bd.appendChild(b);
   const bb = document.createElement('button'); bb.textContent = '立即召唤 Boss'; bb.onclick = () => startBoss(); bd.appendChild(bb);
+  const bl = document.createElement('button'); bl.textContent = '升 1 级'; bl.onclick = () => { S.run.queue++; S.run.lastLv = -9; }; bd.appendChild(bl);
+  const bc = document.createElement('button'); bc.textContent = '开宝箱'; bc.onclick = () => openChest(); bd.appendChild(bc);
   const c = document.createElement('button'); c.textContent = '复制当前参数';
   c.onclick = () => {
     const t = JSON.stringify(P);
