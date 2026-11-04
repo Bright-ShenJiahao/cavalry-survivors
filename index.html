@@ -42,6 +42,7 @@ const P = {
   spawnMul: 1,       // 刷怪倍率
   zoom: 1,           // 镜头缩放倍率
   god: false,        // 无敌
+  bossTime: 180,     // 最终 Boss 出现时间（秒）
   terrain: true,     // 地形开关
   slopeK: 900,       // 坡度影响（下坡加速/上坡减速）
   mudMul: 0.5,       // 泥地速度倍率
@@ -60,6 +61,7 @@ const SLIDERS = [
   ['guards', '亲卫数量', 0, 12, 1],
   ['cavStart', '敌骑出现时间(秒)', 0, 180, 5],
   ['spawnMul', '刷怪倍率', 0, 4, 0.1],
+  ['bossTime', 'Boss 出现时间(秒)', 10, 600, 10],
   ['zoom', '镜头缩放', 0.5, 2, 0.05],
   ['squash', '2.5D 压扁比例', 0.4, 1, 0.02],
   ['slopeK', '坡度影响', 0, 2000, 50],
@@ -145,6 +147,7 @@ function reset() {
     h: { x: WORLD / 2, y: WORLD / 2, a: -Math.PI / 2, v: 0, hp: 100, max: 100, slashT: 0, slashAnim: 0, flash: 0, leader: true },
     g: [], en: [], nums: [], dust: [],
     spawnAcc: 0, bruteT: 15, cavT: 0, cam: { x: WORLD / 2, y: WORLD / 2 },
+    boss: null, won: false, msg: '', msgT: 0,
   };
   setGuards(P.guards);
 }
@@ -152,11 +155,11 @@ reset();
 
 // ===== 输入 =====
 const keys = {};
-addEventListener('keydown', e => { keys[e.code] = true; if (S.dead && (e.code === 'Space' || e.code === 'Enter')) reset(); });
+addEventListener('keydown', e => { keys[e.code] = true; if ((S.dead || S.won) && (e.code === 'Space' || e.code === 'Enter')) reset(); });
 addEventListener('keyup', e => { keys[e.code] = false; });
 const joy = { on: false, id: null, bx: 0, by: 0, x: 0, y: 0, R: 60 };
 cv.addEventListener('pointerdown', e => {
-  if (S.dead) { reset(); return; }
+  if (S.dead || S.won) { reset(); return; }
   joy.on = true; joy.id = e.pointerId; joy.bx = joy.x = e.clientX; joy.by = joy.y = e.clientY;
   cv.setPointerCapture(e.pointerId);
 });
@@ -270,6 +273,55 @@ function spawn(type) {
   else S.en.push({ type: 'grunt', x, y, r: 9, hp: 20, max: 20, sp: rand(55, 75), cd: 0, flash: 0 });
 }
 
+// ===== 最终 Boss：大流士的阵线（高加米拉） =====
+const PHA_N = 14, PHA_SP = 26;      // 每半边每排人数、间距
+function showMsg(t, d) { S.msg = t; S.msgT = d || 3; }
+function startBoss() {
+  if (S.boss || S.won) return;
+  const L = S.h;
+  const side = L.y - 480 > 300 ? -1 : 1;          // 阵线放在玩家前方（优先北边）
+  const cx = clamp(L.x, 700, WORLD - 700), cy = L.y + side * 480;
+  const B = S.boss = { cx, cy, side, offL: 0, offR: 0, charT: 4, gap: 0 };
+  for (const half of ['L', 'R']) for (let i = 0; i < PHA_N; i++) for (let row = 0; row < 2; row++) {
+    const [x, y] = phaSlot(B, half, i, row);
+    S.en.push({ type: 'pha', half, i, row, x, y, r: 12, hp: 160, max: 160, cd: 0, flash: 0 });
+  }
+  // 两端侧翼骑兵
+  for (const sx of [-1, 1]) for (let k = 0; k < 4; k++)
+    S.en.push({ type: 'cav', x: cx + sx * (PHA_N * PHA_SP + 80 + k * 30), y: cy + rand(-30, 30), r: 13, hp: 70, max: 70, a: side > 0 ? -Math.PI / 2 : Math.PI / 2, v: 0, cd: 0, flash: 0, commit: 0 });
+  // 大流士和近卫
+  const dy = cy + side * 260;
+  S.en.push({ type: 'dar', x: cx, y: dy, r: 18, hp: 1200, max: 1200, a: side > 0 ? -Math.PI / 2 : Math.PI / 2, v: 0, cd: 0, flash: 0, flee: false });
+  for (let k = 0; k < 12; k++) S.en.push({ type: 'grunt', x: cx + rand(-120, 120), y: dy + rand(-60, 60), r: 9, hp: 30, max: 30, sp: rand(55, 75), cd: 0, flash: 0 });
+  showMsg('大流士的阵线出现了！往一侧跑，把阵线拉开缺口', 5);
+}
+function phaSlot(B, half, i, row) {
+  const x = half === 'R' ? B.cx + PHA_SP / 2 + i * PHA_SP + B.offR : B.cx - PHA_SP / 2 - i * PHA_SP + B.offL;
+  return [x, B.cy - B.side * row * 24];
+}
+function updBoss(dt) {
+  if (!S.boss && S.t >= P.bossTime) startBoss();
+  const B = S.boss; if (!B) return;
+  const L = S.h, hw = PHA_N * PHA_SP / 2;
+  // 离玩家近的半边横移去堵，另一半原地；被引开后只能慢慢合拢
+  const tR = L.x > B.cx ? clamp(L.x - B.cx - hw, 0, 1100) : 0;
+  const tL = L.x < B.cx ? clamp(L.x - B.cx + hw, -1100, 0) : 0;
+  B.offR = tR > B.offR ? Math.min(tR, B.offR + 150 * dt) : Math.max(tR, B.offR - 30 * dt);
+  B.offL = tL < B.offL ? Math.max(tL, B.offL - 150 * dt) : Math.min(tL, B.offL + 30 * dt);
+  const wasOpen = B.gap > 120;
+  B.gap = B.offR - B.offL;
+  if (!wasOpen && B.gap > 120) showMsg('缺口打开了！掉头冲进去！', 3);
+  // 镰刀战车
+  const dar = S.en.find(e => e.type === 'dar' && !e.dead);
+  B.charT -= dt;
+  if (B.charT <= 0 && dar) {
+    B.charT = rand(4, 6.5);
+    const x = B.cx + rand(-hw * 1.6, hw * 1.6) + (Math.random() < 0.5 ? B.offL : B.offR) * 0.5;
+    const y = B.cy + B.side * 40;
+    S.en.push({ type: 'char', x, y, r: 16, hp: 80, max: 80, a: Math.atan2(L.y - y, L.x - x), v: P.maxSpeed * 0.5, cd: 0, flash: 0, life: 6 });
+  }
+}
+
 function addNum(x, y, txt, col, big) {
   if (S.nums.length > 220) S.nums.shift();
   S.nums.push({ x: x + rand(-6, 6), y: y - 10, txt: String(txt), t: 0.8, col, big });
@@ -282,6 +334,8 @@ function hit(e, dmg, kx, ky, kp) {
   addNum(e.x, e.y, Math.round(dmg), dmg >= 30 ? '#ffb030' : '#fff', dmg >= 30);
   if (e.hp <= 0) {
     e.dead = true; S.kills++;
+    if (e.type === 'dar') { S.won = true; S.wonT = S.t; }
+    if (e.type === 'dar' || e.type === 'pha') kp = Math.min(kp, 300);
     e.fly = kp > 450 ? 0.7 : 0.4;
     e.fvx = kx * kp + rand(-80, 80); e.fvy = ky * kp + rand(-80, 80);
     e.spin = rand(-14, 14); e.rot = 0;
@@ -300,11 +354,11 @@ const CELL = 40;
 function updEnemies(dt) {
   const L = S.h, riders = [L, ...S.g];
   // 刷怪
-  S.spawnAcc += (1.5 + S.t * 0.06) * P.spawnMul * dt;
+  S.spawnAcc += (1.5 + S.t * 0.06) * P.spawnMul * (S.boss ? 0.25 : 1) * dt;
   while (S.spawnAcc >= 1) { S.spawnAcc--; if (S.en.length < 550) spawn('grunt'); }
   S.bruteT -= dt;
-  if (S.bruteT <= 0) { S.bruteT = Math.max(6, 20 - S.t * 0.05); if (P.spawnMul > 0) spawn('brute'); }
-  if (S.t >= P.cavStart && P.spawnMul > 0) {
+  if (S.bruteT <= 0 && !S.boss) { S.bruteT = Math.max(6, 20 - S.t * 0.05); if (P.spawnMul > 0) spawn('brute'); }
+  if (S.t >= P.cavStart && P.spawnMul > 0 && !S.boss) {
     S.cavT -= dt;
     if (S.cavT <= 0) {
       S.cavT = Math.max(4, 12 - (S.t - P.cavStart) * 0.03);
@@ -320,6 +374,8 @@ function updEnemies(dt) {
     let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(e);
   }
   const qc = qCav();
+  const qch = { max: P.maxSpeed * 1.1, accel: P.accel * 1.6, brake: P.brake, coast: P.coast, turn: P.turnRate * 0.12, fx: 0 };
+  const qd = { max: P.maxSpeed * 0.92, accel: P.accel * 0.9, brake: P.brake * 0.6, coast: P.coast, turn: P.turnRate * 0.8, fx: P.turnSpeedFx };
 
   for (const e of S.en) {
     if (e.flash > 0) e.flash -= dt;
@@ -334,7 +390,27 @@ function updEnemies(dt) {
     let tg = L, td = 1e9;
     for (const rd of riders) { const d = Math.hypot(rd.x - e.x, rd.y - e.y); if (d < td) { td = d; tg = rd; } }
 
-    if (e.type === 'cav') {
+    if (e.type === 'pha') {
+      // 横阵步兵：只回自己的阵位，不追人
+      const [sx, sy] = phaSlot(S.boss, e.half, e.i, e.row);
+      const dx = sx - e.x, dy = sy - e.y, d = Math.hypot(dx, dy);
+      if (d > 2) { const sp = Math.min(d / dt, 160); e.x += dx / d * sp * dt; e.y += dy / d * sp * dt; }
+    } else if (e.type === 'char') {
+      // 镰刀战车：直线冲锋，几乎不转弯
+      e.life -= dt; if (e.life <= 0) e.gone = true;
+      steer(e, Math.cos(e.a), Math.sin(e.a), 1, dt, qch);
+      if (Math.random() < 0.5) S.dust.push({ x: e.x - Math.cos(e.a) * 20, y: e.y - Math.sin(e.a) * 20, t: 0.5, r: rand(4, 7) });
+    } else if (e.type === 'dar') {
+      // 大流士：被靠近就逃，跑不过满速的你
+      const dx = e.x - L.x, dy = e.y - L.y, d = Math.hypot(dx, dy) || 1;
+      if (d < 420) e.flee = true; else if (d > 1100) e.flee = false;
+      if (e.flee) {
+        let fx2 = dx / d, fy2 = dy / d;
+        const edge = 350;
+        if (e.x < edge || e.x > WORLD - edge || e.y < edge || e.y > WORLD - edge) { fx2 += (WORLD / 2 - e.x) / 1500; fy2 += (WORLD / 2 - e.y) / 1500; }
+        steer(e, fx2, fy2, 1, dt, qd);
+      } else steer(e, 0, 0, 0, dt, qd);
+    } else if (e.type === 'cav') {
       // 敌骑：锁定后直线冲锋，冲过头后继续跑一段再回头
       const dx = tg.x - e.x, dy = tg.y - e.y;
       if (e.commit > 0) { e.commit -= dt; steer(e, Math.cos(e.a), Math.sin(e.a), 1, dt, qc); }
@@ -379,6 +455,18 @@ function updEnemies(dt) {
             e.x = hx + nx * rr; e.y = hy + ny * rr;
             if (e.cd <= 0) { rd.v = Math.max(0, rd.v - P.maxSpeed * 0.04); e.cd = 0.3; }
           }
+        } else if (e.type === 'pha') {
+          // 横阵：正面撞不开
+          if (e.cd <= 0) {
+            hit(e, P.ramBase * m * 0.25, nx, ny, 0);
+            if (r > 0.4) addNum(rd.x, rd.y - 20, '挡住!', '#7cf', false);
+            rd.v *= 0.45; e.cd = 0.5;
+          }
+          rd.x -= nx * (rr - d); rd.y -= ny * (rr - d);
+        } else if (e.type === 'dar') {
+          if (e.cd <= 0) { hit(e, P.ramBase * m * 1.2, nx, ny, 0); rd.v *= 0.85; e.cd = 0.4; }
+          const p = (rr - d) / 2;
+          e.x += nx * p; e.y += ny * p; rd.x -= nx * p; rd.y -= ny * p;
         } else if (e.type === 'brute') {
           if (e.cd <= 0) {
             hit(e, P.ramBase * m, nx, ny, 300);
@@ -395,7 +483,7 @@ function updEnemies(dt) {
               hit(e, P.ramBase * m * 1.5, nx, ny, 220 + rd.v);
               rd.v *= 0.85; e.v *= 0.3;
             } else {
-              hurtRider(rd, 10 + 25 * pE / P.maxSpeed, true);
+              hurtRider(rd, (e.type === 'char' ? 25 : 10) + (e.type === 'char' ? 35 : 25) * pE / P.maxSpeed, true);
               rd.v *= 0.35; e.v *= 0.7;
               rd.x += Math.cos(e.a) * 14; rd.y += Math.sin(e.a) * 14;
               if (rd.leader && r > 0.2) addNum(rd.x, rd.y - 30, '被撞!', '#ff5050', true);
@@ -407,10 +495,10 @@ function updEnemies(dt) {
         }
       }
       // 步兵贴身伤害
-      if (!e.dead && e.type !== 'cav') hurtRider(rd, (e.type === 'brute' ? 20 : 5) * dt, false);
+      if (!e.dead && e.type !== 'cav' && e.type !== 'char' && e.type !== 'dar') hurtRider(rd, (e.type === 'brute' ? 20 : e.type === 'pha' ? 8 : 5) * dt, false);
     }
   }
-  S.en = S.en.filter(e => !e.dead || e.fly > 0);
+  S.en = S.en.filter(e => !e.gone && (!e.dead || e.fly > 0));
   // 亲卫阵亡
   S.g = S.g.filter(g => {
     if (g.hp > 0) return true;
@@ -459,6 +547,11 @@ function drawGround(zx, zy) {
       }
     }
   if (P.terrain) drawTerrain(x0, y0, vw, vh);
+  if (S.boss && S.boss.gap > 60) {
+    const B = S.boss, a = clamp((B.gap - 60) / 120, 0, 1) * (0.35 + 0.2 * Math.sin(S.t * 8));
+    ctx.fillStyle = `rgba(255,215,80,${a})`;
+    ctx.fillRect(B.cx + B.offL - PHA_SP / 2, Math.min(B.cy, B.cy - B.side * 24) - 30, B.gap + PHA_SP, 84);
+  }
   ctx.strokeStyle = 'rgba(0,0,0,.07)'; ctx.lineWidth = 2; ctx.beginPath();
   const G = 160;
   for (let x = Math.max(0, Math.floor(x0 / G) * G); x <= Math.min(WORLD, x0 + vw); x += G) { ctx.moveTo(x, Math.max(0, y0)); ctx.lineTo(x, Math.min(WORLD, y0 + vh)); }
@@ -547,21 +640,24 @@ function hpBar(o, w) {
 const ST_LEADER = { horse: '#e8e2d6', rider: '#f5f5f5', ring: '#2a5db0', s: 1 };
 const ST_GUARD = { horse: '#a07850', rider: '#c8d4e6', ring: '#2a5db0', s: 0.85 };
 const ST_CAV = { horse: '#5a3020', rider: '#2a2a2a', ring: '#c03020', s: 0.9 };
+const ST_CHAR = { horse: '#2a2018', rider: '#8a6a30', ring: '#e0b040', s: 1.15 };
+const ST_DAR = { horse: '#d8c070', rider: '#7a2aa0', ring: '#f0d040', s: 1.3 };
+const RIDE_ST = { cav: ST_CAV, char: ST_CHAR, dar: ST_DAR };
 
 function drawEnemies() {
   for (const e of S.en) {
-    if (e.type === 'cav') {
+    if (RIDE_ST[e.type]) {
       ctx.save();
       if (e.dead) ctx.globalAlpha = Math.max(0, Math.min(1, e.fly * 3));
       if (e.dead) { ctx.translate(e.x, e.y); ctx.rotate(e.rot); ctx.translate(-e.x, -e.y); }
-      drawRider(e, ST_CAV, !e.dead && e.v > P.maxSpeed * 0.6);
+      drawRider(e, RIDE_ST[e.type], !e.dead && e.v > P.maxSpeed * 0.6);
       ctx.restore();
-      if (!e.dead && e.hp < e.max) hpBar(e, 26);
+      if (!e.dead && e.hp < e.max && e.type !== 'dar') hpBar(e, 26);
       continue;
     }
     ctx.save(); ctx.translate(e.x, e.y);
     if (e.dead) { ctx.scale(1 + e.z / 120, 1 + e.z / 120); ctx.rotate(e.rot); ctx.globalAlpha = Math.max(0, Math.min(1, e.fly * 3)); }
-    ctx.fillStyle = e.flash > 0 ? '#fff' : (e.type === 'brute' ? '#5b3a6e' : '#b8432f');
+    ctx.fillStyle = e.flash > 0 ? '#fff' : (e.type === 'brute' ? '#5b3a6e' : e.type === 'pha' ? '#7a2424' : '#b8432f');
     ctx.strokeStyle = '#2a1410'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(0, 0, e.r, 0, TAU); ctx.fill(); ctx.stroke();
     if (e.type === 'grunt') { ctx.fillStyle = '#e8c34a'; ctx.fillRect(-e.r, -3, e.r * 2, 3); }
@@ -633,7 +729,7 @@ function drawRider3(o, st, charging) {
   ctx.lineCap = 'butt';
 }
 function drawFoot3(e) {
-  const big = e.type === 'brute', r = e.r, zz = e.z || 0, hgt = big ? 30 : 16;
+  const big = e.type === 'brute', pha = e.type === 'pha', r = e.r, zz = e.z || 0, hgt = big ? 30 : pha ? 22 : 16;
   const sh = 1 / (1 + zz / 80);
   shadow3(e.x, e.y, r * sh, r * 0.6 * sh, 0);
   const p = P3(e.x, e.y, zz);
@@ -641,11 +737,12 @@ function drawFoot3(e) {
   if (e.dead) { ctx.rotate(e.rot); ctx.globalAlpha = clamp(e.fly * 3, 0, 1); }
   ctx.translate(0, hgt / 2);
   ctx.lineCap = 'round';
-  const col = e.flash > 0 ? '#fff' : (big ? '#5b3a6e' : '#b8432f');
+  const col = e.flash > 0 ? '#fff' : (big ? '#5b3a6e' : pha ? '#7a2424' : '#b8432f');
   seg([0, -r * 0.6], [0, -hgt], r * 1.5 + 3, '#2a1410'); seg([0, -r * 0.6], [0, -hgt], r * 1.5, col);
   ctx.fillStyle = '#d9a877'; ctx.strokeStyle = '#2a1410'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.arc(0, -hgt - r * 0.55, r * 0.6, 0, TAU); ctx.fill(); ctx.stroke();
-  if (!big) { ctx.fillStyle = '#e8c34a'; ctx.fillRect(-r * 0.6, -hgt - r * 0.85, r * 1.2, 2.5); }
+  if (pha) { ctx.fillStyle = '#c9a85a'; ctx.strokeStyle = '#2a1410'; ctx.fillRect(-r * 0.9, -hgt * 0.85, r * 1.8, hgt * 0.6); ctx.strokeRect(-r * 0.9, -hgt * 0.85, r * 1.8, hgt * 0.6); seg([r * 0.7, 0], [r * 0.7, -hgt - 18], 2, '#bbb'); }
+  else if (!big) { ctx.fillStyle = '#e8c34a'; ctx.fillRect(-r * 0.6, -hgt - r * 0.85, r * 1.2, 2.5); }
   ctx.lineCap = 'butt';
   ctx.restore();
 }
@@ -671,10 +768,11 @@ function draw3(dt) {
   for (const o of list) {
     if (o === S.h) drawRider3(o, ST_LEADER, ratio(o) >= P.charge);
     else if (!o.type) { drawRider3(o, ST_GUARD, ratio(o) >= P.charge); if (o.hp < o.max) bar3(o, 26, 52, '#4c4'); }
-    else if (o.type === 'cav') {
+    else if (RIDE_ST[o.type]) {
       ctx.save(); if (o.dead) ctx.globalAlpha = clamp(o.fly * 3, 0, 1);
-      drawRider3(o, ST_CAV, !o.dead && o.v > P.maxSpeed * 0.6); ctx.restore();
-      if (!o.dead && o.hp < o.max) bar3(o, 26, 50, '#e44');
+      drawRider3(o, RIDE_ST[o.type], !o.dead && o.v > P.maxSpeed * 0.6); ctx.restore();
+      if (o.type === 'dar' && !o.dead) { const p = P3(o.x, o.y, 78); ctx.fillStyle = '#f0d040'; ctx.font = 'bold 14px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText('大流士', p[0], p[1]); }
+      else if (!o.dead && o.hp < o.max) bar3(o, 26, 50, '#e44');
     } else { drawFoot3(o); if (o.type === 'brute' && !o.dead) bar3(o, 40, 56, '#e44'); }
   }
   drawNums(dt, true);
@@ -705,6 +803,31 @@ function drawHUD() {
     ctx.fillStyle = 'rgba(255,255,255,.5)';
     ctx.beginPath(); ctx.arc(joy.bx + dx * k, joy.by + dy * k, 24, 0, TAU); ctx.fill();
   }
+  // Boss 血条与提示
+  const dar = S.boss && S.en.find(e => e.type === 'dar');
+  if (dar) {
+    const w = Math.min(360, W * 0.5), x = (W - w) / 2, y = 14;
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x - 3, y - 3, w + 6, 16);
+    ctx.fillStyle = '#c040e0'; ctx.fillRect(x, y, w * Math.max(0, dar.hp) / dar.max, 10);
+    ctx.textAlign = 'center'; ctx.font = 'bold 13px system-ui,sans-serif'; ctx.lineWidth = 3; ctx.strokeStyle = '#000';
+    const t = `大流士${dar.flee ? '（逃跑中）' : ''}   阵线缺口 ${Math.round(Math.max(0, S.boss.gap))}`;
+    ctx.strokeText(t, W / 2, y + 30); ctx.fillStyle = '#fff'; ctx.fillText(t, W / 2, y + 30);
+  }
+  if (S.msgT > 0) {
+    S.msgT -= 1 / 60;
+    ctx.textAlign = 'center'; ctx.font = 'bold 20px system-ui,sans-serif'; ctx.lineWidth = 4; ctx.strokeStyle = '#000';
+    ctx.globalAlpha = clamp(S.msgT, 0, 1);
+    ctx.strokeText(S.msg, W / 2, H * 0.3); ctx.fillStyle = '#ffd860'; ctx.fillText(S.msg, W / 2, H * 0.3);
+    ctx.globalAlpha = 1;
+  }
+  if (S.won) {
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#ffd860';
+    ctx.font = 'bold 34px system-ui,sans-serif'; ctx.fillText('高加米拉大捷', W / 2, H / 2 - 24);
+    ctx.fillStyle = '#fff'; ctx.font = '16px system-ui,sans-serif';
+    ctx.fillText(`用时 ${mm}:${String(ss).padStart(2, '0')}   击杀 ${S.kills}   亲卫幸存 ${S.g.length}`, W / 2, H / 2 + 12);
+    ctx.fillText('点击屏幕 / 按空格 重新开始', W / 2, H / 2 + 40);
+  }
   if (S.dead) {
     ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
@@ -719,7 +842,7 @@ function drawHUD() {
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (!S.dead) { S.t += dt; updRiders(dt); updEnemies(dt); updSlash(dt); }
+  if (!S.dead && !S.won) { S.t += dt; updBoss(dt); updRiders(dt); updEnemies(dt); updSlash(dt); }
   const h = S.h, z = baseZoom();
   const look = 0.35 * h.v;
   const tx = h.x + Math.cos(h.a) * look, ty = h.y + Math.sin(h.a) * look;
@@ -727,7 +850,7 @@ function frame(now) {
   S.cam.x += (tx - S.cam.x) * k; S.cam.y += (ty - S.cam.y) * k;
 
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  const fdt = S.dead ? 0 : dt;
+  const fdt = S.dead || S.won ? 0 : dt;
   if (P.view25) {
     SQ = P.squash;
     ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z * SQ); ctx.translate(-S.cam.x, -S.cam.y);
@@ -777,6 +900,7 @@ if (DEBUG) {
   g.querySelector('input').addEventListener('change', ev => { P.god = ev.target.checked; });
   bd.appendChild(g);
   const b = document.createElement('button'); b.textContent = '重新开始'; b.onclick = reset; bd.appendChild(b);
+  const bb = document.createElement('button'); bb.textContent = '立即召唤 Boss'; bb.onclick = () => startBoss(); bd.appendChild(bb);
   const c = document.createElement('button'); c.textContent = '复制当前参数';
   c.onclick = () => {
     const t = JSON.stringify(P);
