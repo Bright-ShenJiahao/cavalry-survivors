@@ -76,6 +76,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:n
 <script src="assets/pcav8/meta.js"></script>
 <script src="assets/spara/meta.js"></script>
 <script src="assets/immortal/meta.js"></script>
+<script src="assets/props/meta.js"></script>
 <script>
 'use strict';
 const FORCE_DEBUG = false;
@@ -108,6 +109,7 @@ const P = {
   bossTime: 180,     // 最终 Boss 出现时间（秒）
   art: new URLSearchParams(location.search).get('art') || 'retro', // 美术风格：blocks / cartoon / retro / fine
   terrain: true,     // 地形开关
+  props: true,       // 地面摆件（栅栏/营帐/草丛/石头…）
   slopeK: 900,       // 坡度影响（下坡加速/上坡减速）
   mudMul: 0.5,       // 泥地速度倍率
   view25: true,      // 2.5D 视角
@@ -169,6 +171,7 @@ function mudsIn(i, j) {    // 每个小格子里可能有一片泥地（几团�
 }
 function mudAt(x, y) {
   if (!P.terrain) return false;
+  if (P.props && typeof pondAt === 'function' && pondAt(x, y)) return true;
   const i = Math.floor(x / MUD_CELL), j = Math.floor(y / MUD_CELL);
   for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (const m of mudsIn(i + a, j + b)) { const dx = x - m.x, dy = y - m.y; if (dx * dx + dy * dy < m.r * m.r * 0.7) return true; }
   return false;
@@ -184,6 +187,133 @@ function gradAt(x, y) {
     gx += e * dx; gy += e * dy;
   }
   return [gx, gy];
+}
+
+// ===== 地面摆件（无限地图，按格子确定性生成） =====
+const PROP_CELL = 600, POND_CELL = 1800, propCache = new Map(), pondCache = new Map();
+// 碰撞圈 [dx,dy,r]；brk=可撞碎（loss=撞碎后掉速比例）；tall=挡视线时半透明
+const PDEF = {
+  fence: { cs: [[-45, 0, 18], [0, 0, 18], [45, 0, 18]], brk: .10, col: '#7a5530' },
+  fenceC: { cs: [[-40, 0, 18], [0, 0, 18], [30, -25, 18]], brk: .10, col: '#7a5530' },
+  tentW: { cs: [[0, -10, 55]], brk: .25, tall: 1, col: '#d8c8a0' },
+  tentR: { cs: [[0, -10, 68]], brk: .25, tall: 1, col: '#b84a36' },
+  flag: { cs: [[0, 0, 12]], brk: .10, col: '#c03028' },
+  fire: { cs: [[0, 0, 22]], brk: 0, col: '#ff9a30' },
+  tam1: { cs: [[0, -6, 32]], tall: 1 }, tam2: { cs: [[0, -6, 38]], tall: 1 },
+  rockM: { cs: [[0, -4, 22]] },
+  bushS: {}, bushM: {}, wreck: {},
+};
+const FLAT = new Set(['tuft1', 'tuft2', 'tuft3', 'tuft4', 'rubble', 'flat', 'dec1', 'dec2', 'dec3', 'pond1', 'pond2']);
+const mkProp = (id, k, x, y) => ({ prop: 1, id, k, x, y, flat: FLAT.has(k), d: PDEF[k] || {} });
+const nearSpawn = (x, y, r) => Math.hypot(x - SPAWN.x, y - SPAWN.y) < r;
+// 出生点旁边的小营地（往外不再出现营帐）
+const CAMP = [
+  ['tentR', 2450, 2330], ['tentW', 2310, 2390], ['tentW', 2590, 2400], ['flag', 2380, 2250], ['fire', 2470, 2440],
+  ['fence', 2290, 2190], ['fence', 2610, 2190], ['fence', 2300, 2520], ['fenceC', 2600, 2525],
+].map((a, n) => mkProp('camp' + n, a[0], a[1], a[2]));
+function propsIn(i, j) {
+  const key = i + ',' + j; let v = propCache.get(key); if (v) return v;
+  v = [];
+  const x0 = i * PROP_CELL, y0 = j * PROP_CELL, R = (k) => hsh(i, j, 100 + k);
+  const add = (k, x, y, n) => { if (!nearSpawn(x, y, 320) && !mudAt(x, y)) v.push(mkProp(key + ':' + n, k, x, y)); };
+  const nt = Math.floor(R(0) * 4);   // 草丛 0~3
+  for (let q = 0; q < nt; q++) add('tuft' + (1 + Math.floor(R(10 + q) * 4)), x0 + R(20 + q) * PROP_CELL, y0 + R(30 + q) * PROP_CELL, 't' + q);
+  if (R(1) < 0.22) add(R(2) < 0.6 ? 'bushS' : 'bushM', x0 + R(3) * PROP_CELL, y0 + R(4) * PROP_CELL, 'b');
+  if (R(5) < 0.10) { const t = Math.floor(R(6) * 4); add(['wreck', 'dec1', 'dec2', 'dec3'][t], x0 + 100 + R(7) * 400, y0 + 100 + R(8) * 400, 'w'); }
+  if (R(9) < 0.06) {   // 野外木栅栏：一小段
+    const n = 1 + Math.floor(R(40) * 3), fx = x0 + 80 + R(41) * 260, fy = y0 + 100 + R(42) * 400;
+    for (let q = 0; q < n; q++) add(q === n - 1 && R(43) < 0.4 ? 'fenceC' : 'fence', fx + q * 92, fy, 'f' + q);
+  }
+  propCache.set(key, v); return v;
+}
+function pondsIn(i, j) {   // 水塘：很少，减速；边上长柽柳（挡路）
+  const key = i + ',' + j; let v = pondCache.get(key); if (v) return v;
+  v = [];
+  const cx = i * POND_CELL + POND_CELL / 2 + (hsh(i, j, 201) - .5) * 900, cy = j * POND_CELL + POND_CELL / 2 + (hsh(i, j, 202) - .5) * 900;
+  if (hsh(i, j, 200) < 0.12 && !nearSpawn(cx, cy, 900)) {
+    const big = hsh(i, j, 203) < 0.5, p = mkProp('p' + key, big ? 'pond2' : 'pond1', cx, cy);
+    p.pr = big ? 140 : 100; v.push(p);
+    const nt = 1 + Math.floor(hsh(i, j, 204) * 2);
+    for (let q = 0; q < nt; q++) { const a = hsh(i, j, 210 + q) * TAU, d = p.pr + 50; v.push(mkProp('p' + key + 't' + q, hsh(i, j, 220 + q) < 0.5 ? 'tam1' : 'tam2', cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.8)); }
+  }
+  pondCache.set(key, v); return v;
+}
+function hillProps(h) {   // 坡顶碎石（不挡路），坡边 1~2 块大石头（挡路）
+  if (h.props) return h.props;
+  const s = Math.floor(h.x * 7 + h.y * 13), R = (k) => hsh(s, 77, k), v = [];
+  const n = 3 + Math.floor(R(0) * 2);
+  for (let q = 0; q < n; q++) { const a = R(1 + q) * TAU, d = h.r * (0.2 + R(10 + q) * 0.15); v.push(mkProp('h' + s + 'r' + q, R(20 + q) < 0.5 ? 'rubble' : 'flat', h.x + Math.cos(a) * d, h.y + Math.sin(a) * d)); }
+  const nr = 1 + Math.floor(R(30) * 2);
+  for (let q = 0; q < nr; q++) { const a = R(31 + q) * TAU, d = h.r * 0.85; const x = h.x + Math.cos(a) * d, y = h.y + Math.sin(a) * d; if (!nearSpawn(x, y, 320)) v.push(mkProp('h' + s + 'k' + q, 'rockM', x, y)); }
+  return h.props = v;
+}
+function pondAt(x, y) {
+  const i = Math.floor(x / POND_CELL), j = Math.floor(y / POND_CELL);
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (const p of pondsIn(i + a, j + b)) if (p.pr) { const dx = x - p.x, dy = (y - p.y) / 0.8; if (dx * dx + dy * dy < p.pr * p.pr) return true; }
+  return false;
+}
+// 每帧收集镜头附近的摆件
+function gatherProps() {
+  const out = [];
+  if (!P.terrain || !P.props) { S.pv = out; S.solid = out; return; }
+  const z = baseZoom(), rx = W / z / 2 + 400, ry = H / (z * (P.view25 ? SQ : 1)) / 2 + 400, cx = S.cam.x, cy = S.cam.y;
+  const inV = p => Math.abs(p.x - cx) < rx && Math.abs(p.y - cy) < ry;
+  for (let i = Math.floor((cx - rx) / PROP_CELL); i <= Math.floor((cx + rx) / PROP_CELL); i++)
+    for (let j = Math.floor((cy - ry) / PROP_CELL); j <= Math.floor((cy + ry) / PROP_CELL); j++) for (const p of propsIn(i, j)) out.push(p);
+  for (let i = Math.floor((cx - rx) / POND_CELL) - 1; i <= Math.floor((cx + rx) / POND_CELL) + 1; i++)
+    for (let j = Math.floor((cy - ry) / POND_CELL) - 1; j <= Math.floor((cy + ry) / POND_CELL) + 1; j++) for (const p of pondsIn(i, j)) if (inV(p)) out.push(p);
+  for (let i = Math.floor((cx - rx) / HILL_CELL) - 1; i <= Math.floor((cx + rx) / HILL_CELL) + 1; i++)
+    for (let j = Math.floor((cy - ry) / HILL_CELL) - 1; j <= Math.floor((cy + ry) / HILL_CELL) + 1; j++) for (const h of hillsIn(i, j)) for (const p of hillProps(h)) if (inV(p)) out.push(p);
+  for (const p of CAMP) if (inV(p)) out.push(p);
+  S.pv = out.filter(p => !S.broken.has(p.id));
+  S.solid = S.pv.filter(p => p.d.cs);
+}
+// 撞碎
+function smash(p, o) {
+  S.broken.add(p.id);
+  const d = p.d, n = p.k === 'fire' ? 18 : p.k.startsWith('tent') ? 26 : 14;
+  for (let q = 0; q < n; q++) {
+    const a = o.a + rand(-1.1, 1.1), sp = rand(80, 260) + o.v * 0.4;
+    S.debris.push({ x: p.x + rand(-20, 20), y: p.y + rand(-10, 10), z: rand(5, 30), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz: rand(120, 320), t: rand(0.7, 1.3), s: rand(3, 8), rot: rand(0, 6), sp: rand(-12, 12),
+      col: p.k === 'fire' ? (Math.random() < 0.6 ? '#ffb040' : '#4a3020') : Math.random() < 0.7 ? d.col : '#5a3a1e', fire: p.k === 'fire' });
+  }
+  o.v *= 1 - (d.brk || 0);
+  if (o === S.h || !o.type) addNum(p.x, p.y - 30, '撞碎!', '#ffcc66', o === S.h);
+}
+// 实心摆件的碰撞：够快就撞碎（可撞碎的），否则当墙推开
+function propCollide(o, rad, canSmash) {
+  for (const p of S.solid) {
+    if (S.broken.has(p.id)) continue;
+    for (const c of p.d.cs) {
+      const cx = p.x + c[0], cy = p.y + c[1], dx = o.x - cx, dy = o.y - cy, rr = c[2] + rad, d2 = dx * dx + dy * dy;
+      if (d2 >= rr * rr) continue;
+      if (canSmash && p.d.brk !== undefined && ratio(o) >= P.charge) { smash(p, o); break; }
+      const d = Math.sqrt(d2) || 1, nx = dx / d, ny = dy / d;
+      o.x = cx + nx * rr; o.y = cy + ny * rr;
+      if (o.v !== undefined) {
+        const into = -(Math.cos(o.a) * nx + Math.sin(o.a) * ny);
+        if (into > 0.2) {
+          o.v *= 0.85;
+          // 顺着墙滑开
+          const t1 = Math.atan2(-nx, ny), t2 = Math.atan2(nx, -ny);
+          o.a = Math.abs(wrap(t1 - o.a)) < Math.abs(wrap(t2 - o.a)) ? wrap(o.a + wrap(t1 - o.a) * 0.15) : wrap(o.a + wrap(t2 - o.a) * 0.15);
+        }
+      }
+    }
+  }
+}
+// 敌人绕开：返回推离障碍的方向（look=前探距离）
+function propAvoid(x, y, ax, ay, look, rad) {
+  let vx = 0, vy = 0;
+  const px = x + ax * look, py = y + ay * look;
+  for (const p of S.solid) for (const c of p.d.cs) {
+    const cx = p.x + c[0], cy = p.y + c[1], rr = c[2] + rad + 30;
+    for (const [qx, qy, w] of [[x, y, 1], [px, py, 1.5]]) {
+      const dx = qx - cx, dy = qy - cy, d = Math.hypot(dx, dy);
+      if (d < rr && d > 0) { const f = (rr - d) / rr * w; vx += dx / d * f; vy += dy / d * f; }
+    }
+  }
+  return [vx, vy];
 }
 
 // ===== 画布 =====
@@ -214,7 +344,7 @@ function reset(demo) {
   S = {
     t: 0, kills: 0, dead: false,
     h: { x: WORLD / 2, y: WORLD / 2, a: -Math.PI / 2, v: 0, hp: 100, max: 100, slashT: 0, slashAnim: 0, flash: 0, leader: true },
-    g: [], en: [], nums: [], dust: [],
+    g: [], en: [], nums: [], dust: [], debris: [], broken: new Set(), pv: [], solid: [],
     spawnAcc: 0, bruteT: 15, cavT: 0, cam: { x: WORLD / 2, y: WORLD / 2 },
     boss: null, won: false, msg: '', msgT: 0, demo: !!demo, demoA: 0,
   };
@@ -304,7 +434,9 @@ function dust(o) {
 
 function updRiders(dt) {
   const L = S.h, inp = getInput();
+  gatherProps();
   braking = steer(L, inp.x || 0, inp.y || 0, inp.m, dt, qLeader());
+  propCollide(L, 16, true);
   dust(L);
   // 亲卫：用同样的惯性跑向楔形阵位
   const ca = Math.cos(L.a), sa = Math.sin(L.a), q = qGuard();
@@ -316,6 +448,7 @@ function updRiders(dt) {
     let tv = d > 110 ? q.max : clamp(L.v + along * 2 + lat * 0.6, 0, q.max);
     if (L.v < 15 && d < 12) tv = 0;
     steer(g, ca * fwd + ex * 2.5, sa * fwd + ey * 2.5, tv / q.max, dt, q);
+    propCollide(g, 14, true);
     dust(g);
   }
   // 骑手之间互相推开
@@ -488,12 +621,16 @@ function updEnemies(dt) {
     } else if (e.type === 'cav') {
       // 敌骑：锁定后直线冲锋，冲过头后继续跑一段再回头
       const dx = tg.x - e.x, dy = tg.y - e.y;
+      // 会绕开摆件；实在绕不开（锁定冲锋中）才撞过去
+      const av = propAvoid(e.x, e.y, Math.cos(e.a), Math.sin(e.a), 60 + e.v * 0.4, e.r);
       if (e.commit > 0) { e.commit -= dt; steer(e, Math.cos(e.a), Math.sin(e.a), 1, dt, qc); }
       else {
         const facing = (Math.cos(e.a) * dx + Math.sin(e.a) * dy) / (td || 1);
         if (td < 70 && facing < 0.3 && e.v > qc.max * 0.5) e.commit = 0.9;
-        steer(e, dx, dy, 1, dt, qc);
+        const dn = td || 1;
+        steer(e, dx / dn + av[0] * 2.5, dy / dn + av[1] * 2.5, 1, dt, qc);
       }
+      propCollide(e, e.r, true);
       if (e.v > P.maxSpeed * 0.45 && Math.random() < 0.3) S.dust.push({ x: e.x - Math.cos(e.a) * 18, y: e.y - Math.sin(e.a) * 18, t: 0.45, r: rand(3, 5) });
     } else {
       let dx = tg.x - e.x, dy = tg.y - e.y, d = td || 1;
@@ -508,7 +645,9 @@ function updEnemies(dt) {
           if (od > 0 && od < rr) { const p = (rr - od) / rr * 120; mx += ox / od * p; my += oy / od * p; }
         }
       }
+      if (S.solid.length) { const av = propAvoid(e.x, e.y, dx / d, dy / d, 40, e.r); mx += av[0] * esp * 1.6; my += av[1] * esp * 1.6; }
       e.x += mx * dt; e.y += my * dt;
+      if (S.solid.length) propCollide(e, e.r, false);
       e.fa = Math.atan2(my, mx); e.wk = (e.wk || Math.random() * 6) + dt * Math.hypot(mx, my) * 0.11;
     }
 
@@ -1013,14 +1152,44 @@ const RD_HERO = { key: 'hero', body: '#f2f2f2', ring: '#222', lance: '#d0d0d0', 
 const RD_GUARD = { key: 'guard', body: '#3a5fc8', ring: '#b8bcc4' };
 const RD_CAV = { key: 'cav', body: '#b8322a', ring: '#c0a040' };
 
+const PROP_IMG = {};
+for (const k of Object.keys(window.PROPS || {})) { const im = new Image(); im.src = `assets/props/${k}.png`; PROP_IMG[k] = im; }
+function propDraw(p) {
+  const M = window.PROPS && PROPS[p.k], im = PROP_IMG[p.k]; if (!M || !ready(im)) return;
+  const q = P3(p.x, p.y, 0);
+  if (p.flat) { ctx.drawImage(im, q[0] - M.w / 2, q[1] - M.h / 2, M.w, M.h); return; }
+  let al = 1;
+  if (p.d.tall) {   // 主角走到高物后面时变半透明
+    const h = S.h, dx = h.x - p.x, dy = p.y - h.y;
+    if (Math.abs(dx) < M.w * 0.45 && dy > 0 && dy < M.ay / SQ) al = 0.45;
+  }
+  if (p.k === 'fire') { const f = 0.85 + 0.15 * Math.sin(S.t * 13 + p.x); ctx.save(); ctx.globalAlpha = 0.25 * f; ctx.fillStyle = '#ffa040'; ctx.beginPath(); ctx.ellipse(q[0], q[1] - 8, 46 * f, 26 * f, 0, 0, TAU); ctx.fill(); ctx.restore(); }
+  if (al < 1) { ctx.save(); ctx.globalAlpha = al; }
+  ctx.drawImage(im, q[0] - M.ax, q[1] - M.ay, M.w, M.h);
+  if (al < 1) ctx.restore();
+}
+function drawDebris(dt) {
+  for (const b of S.debris) {
+    b.t -= dt; b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt; b.vz -= 900 * dt; b.rot += b.sp * dt;
+    if (b.z < 0) { b.z = 0; b.vz *= -0.3; b.vx *= 0.6; b.vy *= 0.6; b.sp *= 0.5; }
+    const q = P3(b.x, b.y, b.z);
+    ctx.save(); ctx.globalAlpha = clamp(b.t * 2, 0, 1); ctx.translate(q[0], q[1]); ctx.rotate(b.rot);
+    ctx.fillStyle = b.col; ctx.fillRect(-b.s, -b.s * 0.35, b.s * 2, b.s * 0.7);
+    ctx.restore();
+  }
+  S.debris = S.debris.filter(b => b.t > 0);
+}
 function draw3(dt) {
+  for (const p of S.pv) if (p.pr) propDraw(p);
+  for (const p of S.pv) if (p.flat && !p.pr) propDraw(p);
   drawDust(dt, true);
   for (const g of S.g) drawSlash3(g, GSLASH_R);
   drawSlash3(S.h, SLASH_R);
-  const list = [...S.en, ...S.g, S.h].sort((a, b) => a.y - b.y);
+  const list = [...S.en, ...S.g, S.h, ...S.pv.filter(p => !p.flat)].sort((a, b) => a.y - b.y);
   const A = ARTS[P.art], L0 = S.h;
   for (const o of [L0, ...S.g, ...S.en]) if (o.v !== undefined) o.anim = (o.anim || 0) + dt * (o.v < 15 ? 0 : 6 + 10 * Math.min(1, o.v / P.maxSpeed));
   for (const o of list) {
+    if (o.prop) { propDraw(o); continue; }
     if (A) {
       let done = false;
       if (o === S.h) done = (P.horse8 && (comboDraw(o, 'hero8') || riderH8(o, null, RD_HERO))) || riderSpr3(o, A.hero[o.v < 15 ? 0 : Math.floor(o.anim) % 6], 50);
@@ -1050,6 +1219,7 @@ function draw3(dt) {
       else if (!o.dead && o.hp < o.max) bar3(o, 26, 50, '#e44');
     } else { drawFoot3(o); if (o.type === 'brute' && !o.dead) bar3(o, 40, 56, '#e44'); }
   }
+  drawDebris(dt);
   drawNums(dt, true);
 }
 
@@ -1195,7 +1365,7 @@ if (MENU) openMenu();
   const bg = new Image();
   bg.onload = () => { for (const c of el.querySelectorAll('.ld-bg,.ld-img')) c.style.backgroundImage = `url(${bg.src})`; };
   bg.src = Math.min(innerWidth, innerHeight) * (window.devicePixelRatio || 1) > 900 ? 'assets/loading.jpg' : 'assets/loading_s.jpg';
-  const all = Object.values(ARTS).flatMap(a => [...a.hero, a.guard, a.inf, a.shield, a.cav]);
+  const all = [...Object.values(ARTS).flatMap(a => [...a.hero, a.guard, a.inf, a.shield, a.cav]), ...Object.values(PROP_IMG)];
   const t0 = performance.now();
   (function tick() {
     const done = all.filter(im => im.complete).length, p = done / all.length;
@@ -1228,7 +1398,7 @@ if (DEBUG) {
   v.innerHTML = '<input type="checkbox" checked> 2.5D 视角（关掉 = 正俯视）';
   v.querySelector('input').addEventListener('change', ev => { P.view25 = ev.target.checked; });
   bd.appendChild(v);
-  for (const [key, name] of [['horse8', '8 方向马（测试）'], ['grid', '地面网格和细碎小点'], ['vignette', '高速暗角']]) {
+  for (const [key, name] of [['horse8', '8 方向马（测试）'], ['grid', '地面网格和细碎小点'], ['vignette', '高速暗角'], ['props', '地面摆件']]) {
     const l = document.createElement('label');
     l.innerHTML = `<input type="checkbox"${P[key] ? ' checked' : ''}> ${name}`;
     l.querySelector('input').addEventListener('change', ev => { P[key] = ev.target.checked; });
