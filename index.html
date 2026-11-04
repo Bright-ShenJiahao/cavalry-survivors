@@ -397,7 +397,7 @@ function rawInput() {
 
 // ===== 骑乘物理（主角、亲卫、敌骑共用） =====
 const ratio = o => Math.min(1.3, o.v / P.maxSpeed);
-const mult = o => P.dmgMin + (P.dmgMax - P.dmgMin) * ratio(o);
+const mult = o => (o === S.h && S.run && S.run.hm > 0) ? P.dmgMax : P.dmgMin + (P.dmgMax - P.dmgMin) * ratio(o);   // 回马：调头后按满速算
 const qLeader = () => ({ max: P.maxSpeed * runSpd(), accel: P.accel * runAcc(), brake: P.brake, coast: P.coast, turn: P.turnRate * runTurn(), fx: P.turnSpeedFx });
 const qGuard = () => ({ max: P.maxSpeed * 1.15 * runSpd(), accel: P.accel * 1.3 * runAcc(), brake: P.brake, coast: P.coast, turn: P.turnRate * 1.15 * runTurn(), fx: P.turnSpeedFx });
 const qCav = () => ({ max: P.maxSpeed * 0.85, accel: P.accel * 0.7, brake: P.brake * 0.6, coast: P.coast, turn: P.turnRate * 0.6, fx: P.turnSpeedFx });
@@ -745,7 +745,7 @@ function slash(rd, R, base, dt) {
   if (any) { rd.slashT = 0.55; rd.slashAnim = 0.18; }
 }
 function updSlash(dt) {
-  slash(S.h, SLASH_R, P.slashBase, dt);
+  if (S.h.flash > 0) S.h.flash -= dt;   // 主角不再 360° 挥砍，改成骑枪前刺（src/run.js）
   for (const g of S.g) slash(g, GSLASH_R, P.slashBase * 0.6 * runElite(), dt);
 }
 

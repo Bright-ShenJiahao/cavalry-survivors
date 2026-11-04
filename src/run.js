@@ -2,10 +2,12 @@
 // 普通脚本，在主脚本之前加载；只在被调用时才用到主脚本里的全局（S、P、hit、mult…）。
 // 结构参考异世界幸存者 src/run.js：兵器 3 格、战法 3 格、祝福 5 格，兵器战法 5 级，满了只出升级。
 
-const RUN_MAX = { w: 3, s: 3, b: 5 };
+const RUN_MAX = { g: 1, w: 3, s: 3, b: 5 };
 const CARD = {
+  // ---- 专属（金框，不占格子）----
+  lance: { t: 'g', nm: '骑枪', ic: '矛', d: ['刺正前方 100° 内的敌人，伤害靠马速', '伤害 +30%', '枪更长：射程 +25%', '出枪更快', '满级「贯阵」：冲锋速度下一枪贯穿前方一条线'] },
   // ---- 兵器（蓝框）----
-  sabre: { t: 'w', nm: '马刀', ic: '刀', d: ['从马上向两侧挥砍，越快越痛', '伤害 +30%', '挥砍更快', '范围 +25%', '满级：一次砍两刀'] },
+  sabre: { t: 'w', nm: '马刀', ic: '刀', d: ['冲过人群时顺手劈两侧（速度 40% 以上才出刀）', '伤害 +30%', '刀光更长', '砍得更快', '满级「劈斩」：冲锋速度下砍飞敌人，飞出去的人会撞倒后面的人'] },
   bow: { t: 'w', nm: '骑弓', ic: '弓', d: ['自动射最近的敌人', '伤害 +30%', '多 1 支箭', '射得更快', '满级：回马箭，向后多射 2 支，可穿透'] },
   flail: { t: 'w', nm: '流星锤', ic: '锤', d: ['铁锤绕着身体旋转', '伤害 +30%', '多 1 个锤', '半径 +25%', '满级：再多 1 个，锤更大'] },
   jav: { t: 'w', nm: '标枪', ic: '枪', d: ['向前投出，穿透 3 个；马越快飞越远', '伤害 +30%', '多投 1 支', '投得更快', '满级：无限穿透，落地炸开'] },
@@ -16,9 +18,9 @@ const CARD = {
   rain: { t: 's', nm: '箭雨', ic: '雨', d: ['每 9 秒：朝敌人最密处落下 3 轮箭雨', '伤害 +40%', '范围 +30%', '冷却 -2.5 秒', '满级：同时落两处'] },
   // ---- 祝福（灰框）：部曲 + 被动 ----
   str: { t: 'b', nm: '力量', ic: '力', max: 5, d: '所有伤害 +10%' },
-  vit: { t: 'b', nm: '体魄', ic: '体', max: 5, d: '生命上限 +20，并回血' },
-  gal: { t: 'b', nm: '疾驰', ic: '驰', max: 5, d: '最高速度 +4%' },
-  rein: { t: 'b', nm: '驭术', ic: '驭', max: 5, d: '转向 +10%' },
+  vit: { t: 'b', nm: '体魄', ic: '体', max: 5, d: '生命上限 +15%，并回血' },
+  surge: { t: 'b', nm: '蓄势', ic: '势', max: 3, d: '一直保持冲锋速度，伤害每秒 +10%，最多 +30% / 45% / 60%；掉到 60% 以下清零' },
+  turn: { t: 'b', nm: '回马', ic: '回', max: 3, d: '快速调头后 2 / 2.5 / 3 秒内，伤害按满速算' },
   haste: { t: 'b', nm: '急速', ic: '速', max: 5, d: '兵器、战法冷却 -6%' },
   regen: { t: 'b', nm: '再生', ic: '愈', max: 5, d: '每秒回复 0.6 生命' },
   guard: { t: 'b', nm: '部曲', ic: '卫', max: 3, d: '亲卫骑兵 +1' },
@@ -26,8 +28,8 @@ const CARD = {
   // 什么都满了时的保底
   food: { t: 'x', nm: '军粮', ic: '粮', max: 99, d: '回复 40% 生命' },
 };
-const T_NAME = { w: '兵器', s: '战法', b: '祝福', x: '补给' };
-const T_FRAME = { w: 1, s: 2, b: 0, x: 3 };
+const T_NAME = { g: '专属', w: '兵器', s: '战法', b: '祝福', x: '补给' };
+const T_FRAME = { g: 3, w: 1, s: 2, b: 0, x: 3 };
 const lvOf = k => (S.run[CARD[k].t] || {})[k] || 0;
 const maxOf = k => CARD[k].max || 5;
 const runNeed = lv => Math.round((6 + lv * 4 + lv * lv * 0.35) * (P.xpNeed || 1));
@@ -35,14 +37,14 @@ const runNeed = lv => Math.round((6 + lv * 4 + lv * lv * 0.35) * (P.xpNeed || 1)
 function runReset() {
   if (typeof LVUI !== 'undefined' && LVUI) LVUI.hidden = true;
   if (typeof SLOT !== 'undefined' && SLOT) SLOT.hidden = true;
-  S.run = { lv: 1, xp: 0, need: runNeed(1), w: {}, s: {}, b: {}, cd: {}, gems: [], chests: [], shots: [], fx: [], jobs: [], ang: 0, queue: 0, rr: 0, lastLv: -9, horn: 0, chestN: 0 };
+  S.run = { lv: 1, xp: 0, need: runNeed(1), g: { lance: 1 }, w: {}, s: {}, b: {}, surge: 0, hm: 0, hist: [], hmCd: 0, cd: {}, gems: [], chests: [], shots: [], fx: [], jobs: [], ang: 0, queue: 0, rr: 0, lastLv: -9, horn: 0, chestN: 0 };
 }
 // ---- 派生数值 ----
-const runAtk = () => S.run ? 1 + 0.1 * (S.run.b.str || 0) : 1;
+const runAtk = () => S.run ? (1 + 0.1 * (S.run.b.str || 0)) * (1 + S.run.surge) : 1;
 const runCdm = () => S.run ? 1 - 0.06 * (S.run.b.haste || 0) : 1;
-const runSpd = () => S.run ? (1 + 0.04 * (S.run.b.gal || 0)) * (S.run.horn > 0 ? 1.25 : 1) : 1;
+const runSpd = () => S.run && S.run.horn > 0 ? 1.25 : 1;   // 局内不永久改马的手感，只有战法的短时爆发
 const runAcc = () => S.run && S.run.horn > 0 ? 1.8 : 1;
-const runTurn = () => S.run ? 1 + 0.1 * (S.run.b.rein || 0) : 1;
+const runTurn = () => 1;
 const runElite = () => S.run ? 1 + 0.25 * (S.run.b.elite || 0) : 1;
 
 // ---- 击杀掉落 ----
@@ -76,6 +78,25 @@ function runUpdate(dt) {
   // 延迟动作（第二刀、箭雨的后几轮…）
   for (const j of R.jobs) { j.t -= dt; if (j.t <= 0) { j.f(); j.done = true; } }
   R.jobs = R.jobs.filter(j => !j.done);
+  lanceUpd(R.g.lance, dt);
+  // 蓄势：保持冲锋叠伤害，掉到 60% 以下清零
+  if (R.b.surge) { const r = ratio(L); if (r >= P.charge) R.surge = Math.min([0, .3, .45, .6][R.b.surge], R.surge + 0.1 * dt); else if (r < 0.6) R.surge = 0; }
+  // 回马：1.5 秒内马头转过 150° 以上
+  if (R.hm > 0) R.hm -= dt;
+  if (R.hmCd > 0) R.hmCd -= dt;
+  if (R.b.turn) {
+    R.hist.push({ t: S.t, a: L.a }); while (R.hist.length && R.hist[0].t < S.t - 1.5) R.hist.shift();
+    if (R.hmCd <= 0 && L.v > P.maxSpeed * 0.3 && R.hist.some(h => Math.abs(wrap(L.a - h.a)) > 2.6)) {
+      R.hm = [0, 2, 2.5, 3][R.b.turn]; R.hmCd = 3; R.hist = [];
+      addNum(L.x, L.y - 40, '回马！', '#ffd860', true);
+    }
+  }
+  // 劈斩：被砍飞的人撞倒路上的人
+  for (const e of S.en) if (e.dead && e.missile && e.fly > 0) for (const o of S.en) {
+    if (o.dead || o === e || (o.msT || 0) > S.t) continue;
+    const dx = o.x - e.x, dy = o.y - e.y;
+    if (dx * dx + dy * dy < (o.r + 14) ** 2) { o.msT = S.t + 0.5; hit(o, e.missile, e.fvx / 400, e.fvy / 400, 200); }
+  }
   for (const k in R.w) WEAP[k](R.w[k], dt);
   for (const k in R.s) TACT[k](R.s[k], dt);
   // 飞行物
@@ -109,22 +130,23 @@ const anyNear = (x, y, r) => S.en.some(e => !e.dead && Math.abs(e.x - x) < r && 
 // ---- 兵器 ----
 const WEAP = {
   sabre(lv, dt) {
-    const L = S.h;
-    if (!anyNear(L.x, L.y, 130)) return;
-    if (!cdReady('sabre', lv >= 3 ? 0.65 : 0.9, dt)) return;
-    const go = () => {
-      const c = Math.cos(L.a), s = Math.sin(L.a), r = 58 * (lv >= 4 ? 1.25 : 1);
-      for (const sd of [-1, 1]) {
-        const x = L.x - s * sd * 42 + c * 8, y = L.y + c * sd * 42 + s * 8;
-        for (const e of S.en) {
-          if (e.dead) continue;
-          const dx = e.x - x, dy = e.y - y, d = Math.hypot(dx, dy);
-          if (d < r + e.r) hit(e, 9 * (lv >= 2 ? 1.3 : 1) * mult(L), dx / (d || 1), dy / (d || 1), 200);
-        }
-        S.run.fx.push({ k: 'arc', x, y, r, a: Math.atan2(c * sd, -s * sd), t: 0, d: 0.18, col: '#e8f0ff' });
-      }
-    };
-    go(); if (lv >= 5) S.run.jobs.push({ t: 0.15, f: go });
+    // 冲过人群时顺手劈：马身两侧一条长刀光，速度 40% 以上才出刀
+    const L = S.h; if (ratio(L) < 0.4) return;
+    const c = Math.cos(L.a), s = Math.sin(L.a), f0 = -30, f1 = 55 * (lv >= 3 ? 1.5 : 1), l0 = 12, l1 = 70;
+    const inZone = e => { const dx = e.x - L.x, dy = e.y - L.y, f = dx * c + dy * s, l = Math.abs(-dx * s + dy * c); return f > f0 - e.r && f < f1 + e.r && l > l0 - e.r && l < l1 + e.r; };
+    const R = S.run; R.cd.sabre = (R.cd.sabre || 0) - dt;
+    if (R.cd.sabre > 0) return;
+    const tg = S.en.filter(e => !e.dead && Math.abs(e.x - L.x) < 140 && Math.abs(e.y - L.y) < 140 && inZone(e));
+    if (!tg.length) return;
+    R.cd.sabre = (lv >= 4 ? 0.35 : 0.5) * runCdm();
+    const chg = lv >= 5 && ratio(L) >= P.charge, dmg = 8 * (lv >= 2 ? 1.3 : 1) * mult(L) * (chg ? 1.5 : 1);
+    for (const e of tg) {
+      const dx = e.x - L.x, dy = e.y - L.y, sd = (-dx * s + dy * c) > 0 ? 1 : -1;
+      hit(e, dmg, -s * sd * 0.8 + c * 0.6, c * sd * 0.8 + s * 0.6, chg ? 560 : 220);
+      if (chg && e.dead && e.type === 'grunt') e.missile = dmg * 0.5;
+    }
+    const sides = new Set(tg.map(e => ((-(e.x - L.x) * s + (e.y - L.y) * c) > 0 ? 1 : -1)));
+    for (const sd of sides) S.run.fx.push({ k: 'sw', x: L.x, y: L.y, a: L.a, sd, f0, f1, l: 40, t: 0, d: 0.2 });
   },
   bow(lv, dt) {
     const L = S.h;
@@ -157,6 +179,31 @@ const WEAP = {
     for (let i = 0; i < n; i++) shoot(L.x, L.y, L.a + (n > 1 ? (i - 0.5) * 0.16 : 0), 520 + L.v, 0.75, dmg, lv >= 5 ? 999 : 3, 8, 'jav', lv >= 5);
   },
 };
+// ---- 骑枪（专属）：只刺正前方 100°，伤害靠马速 ----
+function lanceUpd(lv, dt) {
+  const L = S.h, R = S.run, reach = 110 * (lv >= 3 ? 1.25 : 1), half = 50 * Math.PI / 180;
+  const c = Math.cos(L.a), s = Math.sin(L.a);
+  R.cd.lance = (R.cd.lance || 0) - dt;
+  if (R.cd.lance > 0) return;
+  const inCone = (e, rr) => { const dx = e.x - L.x, dy = e.y - L.y, d = Math.hypot(dx, dy); if (d > rr + e.r || d < 1) return d < 1; return Math.abs(wrap(Math.atan2(dy, dx) - L.a)) < half + Math.atan2(e.r, d); };
+  const tg = S.en.filter(e => !e.dead && Math.abs(e.x - L.x) < reach + 30 && Math.abs(e.y - L.y) < reach + 30 && inCone(e, reach));
+  const pierce = lv >= 5 && ratio(L) >= P.charge;
+  if (!tg.length && !pierce) return;
+  if (!tg.length && pierce && !anyNear(L.x + c * 150, L.y + s * 150, 160)) return;
+  R.cd.lance = (lv >= 4 ? 0.45 : 0.6) * runCdm();
+  const dmg = 14 * (lv >= 2 ? 1.3 : 1) * mult(L);
+  for (const e of tg) hit(e, dmg, c, s, 260);
+  let len = reach;
+  if (pierce) {   // 贯阵：前方 300 一条线
+    len = 300;
+    for (const e of S.en) {
+      if (e.dead || tg.includes(e)) continue;
+      const dx = e.x - L.x, dy = e.y - L.y, f = dx * c + dy * s, l = Math.abs(-dx * s + dy * c);
+      if (f > 0 && f < 300 && l < 18 + e.r) hit(e, dmg * 0.8, c, s, 300);
+    }
+  }
+  R.fx.push({ k: 'thrust', x: L.x, y: L.y, a: L.a, len, t: 0, d: pierce ? 0.22 : 0.14 });
+}
 function shoot(x, y, a, sp, t, dmg, pierce, r, k, boom) {
   S.run.shots.push({ k, x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, sp, t, dmg, pierce, r, boom, hit: new Set() });
 }
@@ -220,6 +267,7 @@ function runOptions(onlyUp) {
   const R = S.run, c = [];
   for (const k in CARD) {
     const d = CARD[k], t = d.t; if (t === 'x') continue;
+    if (t === 'g') { const l = R.g[k] || 0; if (l > 0 && l < maxOf(k)) c.push({ k, w: 1.3 }); continue; }
     const l = R[t][k] || 0;
     if (l > 0 && l < maxOf(k)) c.push({ k, w: 1.2 });
     else if (!l && !onlyUp && runOwnedN(t) < RUN_MAX[t]) c.push({ k, w: 1 });
@@ -248,7 +296,7 @@ function applyCard(k) {
   const R = S.run, d = CARD[k], L = S.h;
   if (d.t === 'x') { L.hp = Math.min(L.max, L.hp + L.max * 0.4); return; }
   const l = (R[d.t][k] || 0) + 1; R[d.t][k] = l;
-  if (k === 'vit') { L.max += 20; L.hp = Math.min(L.max, L.hp + 20); }
+  if (k === 'vit') { const m = Math.round(100 * (1 + 0.15 * l)); L.hp = Math.min(m, L.hp + m - L.max); L.max = m; }
   if (k === 'guard') { const n = S.g.length + 1; setGuards(n); }
   if (k === 'guard' || k === 'elite') for (const g of S.g) { const m = Math.round(60 * runElite()); if (k === 'elite' || g.max !== m) { g.max = m; g.hp = m; } }
 }
@@ -326,7 +374,7 @@ function ownHTML() {
     for (let i = ks.length; i < RUN_MAX[t]; i++) h += '<span class="sl e"></span>';
     return h;
   };
-  return `<div class="own">${row('w')}<span style="width:8px"></span>${row('s')}<span style="width:8px"></span>${row('b')}</div>`;
+  return `<div class="own">${row('g')}<span style="width:8px"></span>${row('w')}<span style="width:8px"></span>${row('s')}<span style="width:8px"></span>${row('b')}</div>`;
 }
 function renderLevel() {
   const R = S.run;
@@ -454,6 +502,15 @@ function runDrawFx() {
     } else if (f.k === 'arc') {
       ctx.save(); ctx.globalAlpha = 0.85 * k; ctx.strokeStyle = f.col; ctx.lineWidth = 5 * k + 1;
       ctx.translate(p[0], p[1] - 14); ctx.scale(1, SQ); ctx.beginPath(); ctx.arc(0, 0, f.r * 0.8, f.a - 1.1, f.a + 1.1); ctx.stroke(); ctx.restore();
+    } else if (f.k === 'thrust') {
+      const c = Math.cos(f.a), s = Math.sin(f.a), a = P3(f.x + c * 30, f.y + s * 30, 26), b = P3(f.x + c * f.len, f.y + s * f.len, 22);
+      ctx.save(); ctx.globalAlpha = k; ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(255,240,200,.55)'; ctx.lineWidth = 9 * k + 2; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.restore();
+    } else if (f.k === 'sw') {
+      const c = Math.cos(f.a), s = Math.sin(f.a), L = S.h, pt = (fw, l) => P3(L.x + c * fw - s * l * f.sd, L.y + s * fw + c * l * f.sd, 20);
+      ctx.save(); ctx.globalAlpha = 0.9 * k; ctx.strokeStyle = '#eef4ff'; ctx.lineWidth = 6 * k + 1; ctx.lineCap = 'round';
+      ctx.beginPath(); for (let i = 0; i <= 8; i++) { const u = i / 8, p = pt(f.f1 - (f.f1 - f.f0) * u, 22 + Math.sin(u * Math.PI) * f.l); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); } ctx.stroke(); ctx.restore();
     } else if (f.k === 'arrows') {
       ctx.save(); ctx.globalAlpha = k; ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 1.5;
       for (let i = 0; i < 12; i++) { const x = p[0] + (hash(i, f.x | 0) - 0.5) * f.r * 1.6, y = p[1] + (hash(i + 7, f.y | 0) - 0.5) * f.r * SQ * 1.6; ctx.beginPath(); ctx.moveTo(x - 4, y - 30 * k - 8); ctx.lineTo(x, y - 30 * k + 8); ctx.stroke(); }
@@ -469,9 +526,9 @@ function runHUD() {
   ctx.strokeText('Lv ' + R.lv, 172, 21); ctx.fillStyle = '#9fd8ff'; ctx.fillText('Lv ' + R.lv, 172, 21);
   // 已拥有：小方块
   let x = 10; const y = 50;
-  for (const t of ['w', 's', 'b']) {
+  for (const t of ['g', 'w', 's', 'b']) {
     for (const k in R[t]) {
-      ctx.fillStyle = t === 'w' ? 'rgba(40,80,170,.85)' : t === 's' ? 'rgba(100,60,160,.85)' : 'rgba(80,86,96,.85)';
+      ctx.fillStyle = t === 'g' ? 'rgba(170,120,20,.9)' : t === 'w' ? 'rgba(40,80,170,.85)' : t === 's' ? 'rgba(100,60,160,.85)' : 'rgba(80,86,96,.85)';
       ctx.fillRect(x, y, 22, 22); ctx.strokeStyle = '#e8d8a8'; ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, 21, 21);
       ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(CARD[k].ic, x + 11, y + 16);
       ctx.font = 'bold 9px system-ui,sans-serif'; ctx.fillStyle = '#ffd166'; ctx.fillText(R[t][k], x + 19, y + 21);
