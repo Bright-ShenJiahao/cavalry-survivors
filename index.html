@@ -141,41 +141,43 @@ const wrap = a => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-// ===== 地形：坡地 + 泥地 =====
-function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-const HILLS = [], MUDS = [];
-(() => {
-  const R = mulberry(7), C = 2000;
-  // 出生点附近的固定测试地形：北边大坡、东西两个小坡，南边两片泥地
-  HILLS.push({ x: C, y: C - 800, r: 420, h: 170 }, { x: C + 700, y: C - 100, r: 260, h: 100 }, { x: C - 750, y: C + 150, r: 300, h: 120 });
-  MUDS.push({ x: C - 150, y: C + 520, r: 150 }, { x: C + 450, y: C + 650, r: 120 });
-  for (let i = 0; i < 26; i++) {
-    const x = 300 + R() * 3400, y = 300 + R() * 3400;
-    if (Math.hypot(x - C, y - C) < 900) continue;
-    HILLS.push({ x, y, r: 200 + R() * 300, h: 60 + R() * 140 });
+// ===== 地形（无限地图）：按区域用确定的随机数生成坡地和泥地 =====
+function hsh(i, j, k) { let n = (i * 73856093) ^ (j * 19349663) ^ ((k || 0) * 83492791); n = (n ^ (n >>> 13)) * 1274126177; return ((n ^ (n >>> 16)) >>> 0) / 4294967296; }
+const SPAWN = { x: 2000, y: 2000 };
+const HILL_CELL = 1300, MUD_CELL = 650;
+const FIXED_HILLS = [{ x: 2000, y: 1200, r: 420, h: 170 }, { x: 2700, y: 1900, r: 260, h: 100 }, { x: 1250, y: 2150, r: 300, h: 120 }];
+const hillCache = new Map(), mudCache = new Map();
+function hillsIn(i, j) {   // 每个大格子里最多一座坡
+  const k = i + ',' + j; let v = hillCache.get(k); if (v) return v;
+  v = [];
+  const cx = i * HILL_CELL + HILL_CELL / 2, cy = j * HILL_CELL + HILL_CELL / 2;
+  if (Math.hypot(cx - SPAWN.x, cy - SPAWN.y) < 1100) { for (const h of FIXED_HILLS) if (Math.floor(h.x / HILL_CELL) === i && Math.floor(h.y / HILL_CELL) === j) v.push(h); }
+  else if (hsh(i, j, 1) < 0.45) v.push({ x: cx + (hsh(i, j, 2) - .5) * HILL_CELL * 0.6, y: cy + (hsh(i, j, 3) - .5) * HILL_CELL * 0.6, r: 220 + hsh(i, j, 4) * 320, h: 60 + hsh(i, j, 5) * 140 });
+  hillCache.set(k, v); return v;
+}
+function mudsIn(i, j) {    // 每个小格子里可能有一片泥地（几团圆拼成）
+  const k = i + ',' + j; let v = mudCache.get(k); if (v) return v;
+  v = [];
+  const cx = i * MUD_CELL + MUD_CELL / 2, cy = j * MUD_CELL + MUD_CELL / 2;
+  const fixed = (i === 3 && j === 3) || (i === 3 && j === 4);
+  if (fixed || (Math.hypot(cx - SPAWN.x, cy - SPAWN.y) > 500 && hsh(i, j, 7) < 0.16)) {
+    const mx = cx + (hsh(i, j, 8) - .5) * MUD_CELL * 0.5, my = cy + (hsh(i, j, 9) - .5) * MUD_CELL * 0.5, mr = 70 + hsh(i, j, 10) * 110;
+    const n = 3 + Math.floor(hsh(i, j, 11) * 4);
+    for (let q = 0; q < n; q++) { const a = hsh(i, j, 20 + q) * TAU, d = hsh(i, j, 40 + q) * mr * 0.7; v.push({ x: mx + Math.cos(a) * d, y: my + Math.sin(a) * d * 0.8, r: mr * (0.45 + hsh(i, j, 60 + q) * 0.45) }); }
   }
-  for (let i = 0; i < 34; i++) {
-    const x = 200 + R() * 3600, y = 200 + R() * 3600;
-    if (Math.hypot(x - C, y - C) < 350) continue;
-    MUDS.push({ x, y, r: 60 + R() * 120 });
-  }
-  // 每片泥地由几团圆拼成不规则形状
-  for (const m of MUDS) { m.blobs = []; const n = 4 + Math.floor(R() * 4); for (let k = 0; k < n; k++) { const a = R() * TAU, d = R() * m.r * 0.7; m.blobs.push({ x: m.x + Math.cos(a) * d, y: m.y + Math.sin(a) * d * 0.8, r: m.r * (0.45 + R() * 0.45) }); } }
-})();
-const MG = 40, MN = 100, mudGrid = new Uint8Array(MN * MN);
-for (const m of MUDS) for (const b of m.blobs)
-  for (let i = Math.floor((b.x - b.r) / MG); i <= Math.floor((b.x + b.r) / MG); i++)
-    for (let j = Math.floor((b.y - b.r) / MG); j <= Math.floor((b.y + b.r) / MG); j++)
-      if (i >= 0 && j >= 0 && i < MN && j < MN && Math.hypot(i * MG + MG / 2 - b.x, j * MG + MG / 2 - b.y) < b.r) mudGrid[i * MN + j] = 1;
+  mudCache.set(k, v); return v;
+}
 function mudAt(x, y) {
   if (!P.terrain) return false;
-  const i = (x / MG) | 0, j = (y / MG) | 0;
-  return i >= 0 && j >= 0 && i < MN && j < MN && mudGrid[i * MN + j] === 1;
+  const i = Math.floor(x / MUD_CELL), j = Math.floor(y / MUD_CELL);
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (const m of mudsIn(i + a, j + b)) { const dx = x - m.x, dy = y - m.y; if (dx * dx + dy * dy < m.r * m.r * 0.7) return true; }
+  return false;
 }
 function gradAt(x, y) {
   let gx = 0, gy = 0;
   if (!P.terrain) return [0, 0];
-  for (const h of HILLS) {
+  const i = Math.floor(x / HILL_CELL), j = Math.floor(y / HILL_CELL);
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (const h of hillsIn(i + a, j + b)) {
     const dx = x - h.x, dy = y - h.y, r2 = h.r * h.r, d2 = dx * dx + dy * dy;
     if (d2 > r2 * 9) continue;
     const e = h.h * Math.exp(-d2 / r2) * -2 / r2;
@@ -291,10 +293,6 @@ function steer(o, dx, dy, m, dt, q) {
   if (o.v > cap) o.v = Math.max(cap, o.v - (mud ? 500 : q.coast * 2) * dt);
   o.x += Math.cos(o.a) * o.v * dt;
   o.y += Math.sin(o.a) * o.v * dt;
-  const mg = 30;
-  if (o.x < mg || o.x > WORLD - mg || o.y < mg || o.y > WORLD - mg) {
-    o.x = clamp(o.x, mg, WORLD - mg); o.y = clamp(o.y, mg, WORLD - mg); o.v *= 0.9;
-  }
   return brk;
 }
 
@@ -335,7 +333,7 @@ function updRiders(dt) {
 // ===== 敌人 =====
 function spawnPos() {
   const z = baseZoom(), dist = Math.hypot(W, H / (P.view25 ? P.squash : 1)) / z / 2 + 60, ang = Math.random() * TAU;
-  return [clamp(S.h.x + Math.cos(ang) * dist, 20, WORLD - 20), clamp(S.h.y + Math.sin(ang) * dist, 20, WORLD - 20)];
+  return [S.h.x + Math.cos(ang) * dist, S.h.y + Math.sin(ang) * dist];
 }
 function spawn(type) {
   const [x, y] = spawnPos();
@@ -350,8 +348,8 @@ function showMsg(t, d) { S.msg = t; S.msgT = d || 3; }
 function startBoss() {
   if (S.boss || S.won) return;
   const L = S.h;
-  const side = L.y - 480 > 300 ? -1 : 1;          // 阵线放在玩家前方（优先北边）
-  const cx = clamp(L.x, 700, WORLD - 700), cy = L.y + side * 480;
+  const side = -1;          // 阵线放在玩家前方（优先北边）
+  const cx = L.x, cy = L.y + side * 480;
   const B = S.boss = { cx, cy, side, offL: 0, offR: 0, charT: 4, gap: 0 };
   for (const half of ['L', 'R']) for (let i = 0; i < PHA_N; i++) for (let row = 0; row < 2; row++) {
     const [x, y] = phaSlot(B, half, i, row);
@@ -485,7 +483,6 @@ function updEnemies(dt) {
       if (e.flee) {
         let fx2 = dx / d, fy2 = dy / d;
         const edge = 350;
-        if (e.x < edge || e.x > WORLD - edge || e.y < edge || e.y > WORLD - edge) { fx2 += (WORLD / 2 - e.x) / 1500; fy2 += (WORLD / 2 - e.y) / 1500; }
         steer(e, fx2, fy2, 1, dt, qd);
       } else steer(e, 0, 0, 0, dt, qd);
     } else if (e.type === 'cav') {
@@ -611,79 +608,90 @@ function updSlash(dt) {
 // ===== 绘制 =====
 function hash(x, y) { let n = x * 374761393 + y * 668265263; n = (n ^ (n >> 13)) * 1274126177; return ((n ^ (n >> 16)) >>> 0) / 4294967296; }
 
-function drawGround(zx, zy) {
-  const vw = W / zx, vh = H / zy, x0 = S.cam.x - vw / 2, y0 = S.cam.y - vh / 2;
-  ctx.fillStyle = '#2d2a24'; ctx.fillRect(x0, y0, vw, vh);
-  ctx.fillStyle = '#6f8f4a'; ctx.fillRect(0, 0, WORLD, WORLD);
-  const B = 400;
-  for (let i = Math.floor(x0 / B); i <= Math.floor((x0 + vw) / B); i++)
-    for (let j = Math.floor(y0 / B); j <= Math.floor((y0 + vh) / B); j++) {
-      if (i < 0 || j < 0 || i * B >= WORLD || j * B >= WORLD) continue;
-      const hv = hash(i, j);
-      if (hv < 0.5) {
-        ctx.fillStyle = hv < 0.25 ? 'rgba(60,80,30,.35)' : 'rgba(150,140,80,.25)';
-        ctx.beginPath(); ctx.ellipse(i * B + 200 + (hash(i + 7, j) - .5) * 150, j * B + 200 + (hash(i, j + 7) - .5) * 150, 120 + hv * 200, 80 + hash(j, i) * 120, hv * 6, 0, TAU); ctx.fill();
+// ===== 地面：贴图分块渲染（无限地图），每块缓存成一张画布 =====
+const GT = {};
+for (const k of ['grass', 'dirt', 'trod', 'mud']) { const im = new Image(); im.src = `assets/ground/${k}.jpg`; GT[k] = im; }
+const TILE_W = 420;            // 一张贴图在世界里的边长
+const CHUNK = 512, CHUNK_PX = 512;
+const chunks = new Map();
+let chunkBudget = 0;
+function gpat(c, k) {           // 贴图图案，锚定在世界原点，跨块连续
+  const im = GT[k]; if (!ready(im)) return null;
+  const p = c.createPattern(im, 'repeat'); const sc = TILE_W / im.naturalWidth;
+  p.setTransform(new DOMMatrix([sc, 0, 0, sc, 0, 0])); return p;
+}
+// 在块画布上画一团柔边的地面（用另一张贴图）
+function blob(c, x0, y0, k, x, y, r, alpha, core) {
+  const p = gpat(c, k); if (!p) return;
+  const t = blob.t || (blob.t = document.createElement('canvas')), tc = t.getContext('2d');
+  const S2 = Math.ceil(r * 2) + 4; if (t.width < S2) { t.width = t.height = S2; }
+  tc.setTransform(1, 0, 0, 1, 0, 0); tc.globalCompositeOperation = 'source-over'; tc.clearRect(0, 0, S2, S2);
+  tc.save(); tc.translate(-(x - r), -(y - r)); tc.fillStyle = p; tc.fillRect(x - r, y - r, S2, S2); tc.restore();
+  tc.globalCompositeOperation = 'destination-in';
+  const g = tc.createRadialGradient(r, r, r * (core || 0.5), r, r, r);
+  g.addColorStop(0, `rgba(0,0,0,${alpha})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+  tc.fillStyle = g; tc.fillRect(0, 0, S2, S2);
+  c.drawImage(t, 0, 0, S2, S2, x - r - x0, y - r - y0, S2, S2);
+}
+function buildChunk(ci, cj) {
+  const cv2 = document.createElement('canvas'); cv2.width = cv2.height = CHUNK_PX;
+  const c = cv2.getContext('2d'), x0 = ci * CHUNK, y0 = cj * CHUNK;
+  const pg = gpat(c, 'grass'); c.save(); c.translate(-x0, -y0); c.fillStyle = pg; c.fillRect(x0, y0, CHUNK, CHUNK); c.restore();
+  // 大块黄土和踩踏地：按 700 的格子撒，跨块也连续
+  const BC = 700;
+  for (let i = Math.floor((x0 - 500) / BC); i <= Math.floor((x0 + CHUNK + 500) / BC); i++)
+    for (let j = Math.floor((y0 - 500) / BC); j <= Math.floor((y0 + CHUNK + 500) / BC); j++) {
+      const n = Math.floor(hsh(i, j, 101) * 3);
+      for (let q = 0; q < n; q++) {
+        const x = i * BC + hsh(i, j, 110 + q) * BC, y = j * BC + hsh(i, j, 120 + q) * BC, r = 140 + hsh(i, j, 130 + q) * 300;
+        if (x + r < x0 || x - r > x0 + CHUNK || y + r < y0 || y - r > y0 + CHUNK) continue;
+        blob(c, x0, y0, hsh(i, j, 140 + q) < 0.45 ? 'dirt' : 'trod', x, y, r, 0.9, 0.35);
       }
     }
-  if (P.terrain) drawTerrain(x0, y0, vw, vh);
+  // 泥地（和减速判定用同一组圆）
+  if (P.terrain) for (let i = Math.floor((x0 - 300) / MUD_CELL); i <= Math.floor((x0 + CHUNK + 300) / MUD_CELL); i++)
+    for (let j = Math.floor((y0 - 300) / MUD_CELL); j <= Math.floor((y0 + CHUNK + 300) / MUD_CELL); j++)
+      for (const m of mudsIn(i, j)) { if (m.x + m.r * 1.3 < x0 || m.x - m.r * 1.3 > x0 + CHUNK || m.y + m.r * 1.3 < y0 || m.y - m.r * 1.3 > y0 + CHUNK) continue; blob(c, x0, y0, 'mud', m.x, m.y, m.r * 1.25, 1, 0.6); }
+  // 坡地：迎光面亮、背光面暗
+  if (P.terrain) for (let i = Math.floor(x0 / HILL_CELL) - 1; i <= Math.floor((x0 + CHUNK) / HILL_CELL) + 1; i++)
+    for (let j = Math.floor(y0 / HILL_CELL) - 1; j <= Math.floor((y0 + CHUNK) / HILL_CELL) + 1; j++)
+      for (const h of hillsIn(i, j)) {
+        const R = h.r * 1.8; if (h.x + R < x0 || h.x - R > x0 + CHUNK || h.y + R < y0 || h.y - R > y0 + CHUNK) continue;
+        c.save(); c.translate(-x0, -y0);
+        let g = c.createRadialGradient(h.x + h.r * 0.35, h.y + h.r * 0.35, 0, h.x + h.r * 0.35, h.y + h.r * 0.35, R);
+        g.addColorStop(0, `rgba(40,30,10,${0.18 + h.h / 700})`); g.addColorStop(1, 'rgba(40,30,10,0)');
+        c.fillStyle = g; c.beginPath(); c.arc(h.x + h.r * 0.35, h.y + h.r * 0.35, R, 0, TAU); c.fill();
+        g = c.createRadialGradient(h.x - h.r * 0.25, h.y - h.r * 0.25, 0, h.x - h.r * 0.25, h.y - h.r * 0.25, h.r * 1.3);
+        g.addColorStop(0, `rgba(255,240,190,${0.14 + h.h / 700})`); g.addColorStop(1, 'rgba(255,240,190,0)');
+        c.fillStyle = g; c.beginPath(); c.arc(h.x - h.r * 0.25, h.y - h.r * 0.25, h.r * 1.3, 0, TAU); c.fill();
+        c.restore();
+      }
+  return cv2;
+}
+function drawGround(zx, zy) {
+  const vw = W / zx, vh = H / zy, x0 = S.cam.x - vw / 2, y0 = S.cam.y - vh / 2;
+  ctx.fillStyle = '#8a7444'; ctx.fillRect(x0, y0, vw, vh);
+  if (!ready(GT.grass)) return;
+  chunkBudget = 3;   // 每帧最多新生成 3 块，避免卡顿
+  const key0 = P.terrain ? 't' : 'f';
+  for (let ci = Math.floor(x0 / CHUNK); ci <= Math.floor((x0 + vw) / CHUNK); ci++)
+    for (let cj = Math.floor(y0 / CHUNK); cj <= Math.floor((y0 + vh) / CHUNK); cj++) {
+      const k = key0 + ci + ',' + cj; let ch = chunks.get(k);
+      if (!ch && chunkBudget > 0 && ready(GT.dirt) && ready(GT.trod) && ready(GT.mud)) { chunkBudget--; ch = buildChunk(ci, cj); chunks.set(k, ch); if (chunks.size > 80) chunks.delete(chunks.keys().next().value); }
+      if (ch) ctx.drawImage(ch, ci * CHUNK, cj * CHUNK, CHUNK + 0.5, CHUNK + 0.5);
+      else { ctx.save(); ctx.fillStyle = gpat(ctx, 'grass'); ctx.fillRect(ci * CHUNK, cj * CHUNK, CHUNK, CHUNK); ctx.restore(); }
+    }
+  if (P.grid) {
+    ctx.strokeStyle = 'rgba(0,0,0,.07)'; ctx.lineWidth = 2; ctx.beginPath();
+    const G = 160;
+    for (let x = Math.floor(x0 / G) * G; x <= x0 + vw; x += G) { ctx.moveTo(x, y0); ctx.lineTo(x, y0 + vh); }
+    for (let y = Math.floor(y0 / G) * G; y <= y0 + vh; y += G) { ctx.moveTo(x0, y); ctx.lineTo(x0 + vw, y); }
+    ctx.stroke();
+  }
   if (S.boss && S.boss.gap > 60) {
     const B = S.boss, a = clamp((B.gap - 60) / 120, 0, 1) * (0.35 + 0.2 * Math.sin(S.t * 8));
     ctx.fillStyle = `rgba(255,215,80,${a})`;
     ctx.fillRect(B.cx + B.offL - PHA_SP / 2, Math.min(B.cy, B.cy - B.side * 24) - 30, B.gap + PHA_SP, 84);
-  }
-  if (P.grid) {
-  ctx.strokeStyle = 'rgba(0,0,0,.07)'; ctx.lineWidth = 2; ctx.beginPath();
-  const G = 160;
-  for (let x = Math.max(0, Math.floor(x0 / G) * G); x <= Math.min(WORLD, x0 + vw); x += G) { ctx.moveTo(x, Math.max(0, y0)); ctx.lineTo(x, Math.min(WORLD, y0 + vh)); }
-  for (let y = Math.max(0, Math.floor(y0 / G) * G); y <= Math.min(WORLD, y0 + vh); y += G) { ctx.moveTo(Math.max(0, x0), y); ctx.lineTo(Math.min(WORLD, x0 + vw), y); }
-  ctx.stroke();
-  }
-  const C = 70, dk = P.grid ? 1 : 0.4;   // 关掉细节时只留四成小草丛和石子
-  ctx.lineWidth = 2;
-  for (let i = Math.floor(x0 / C); i <= Math.floor((x0 + vw) / C); i++)
-    for (let j = Math.floor(y0 / C); j <= Math.floor((y0 + vh) / C); j++) {
-      if (i < 0 || j < 0 || i * C >= WORLD || j * C >= WORLD) continue;
-      const hv = hash(i + 99, j + 31), px = i * C + hash(i, j + 3) * C, py = j * C + hash(i + 5, j) * C;
-      if (hv < 0.3 * dk) {
-        ctx.strokeStyle = '#4f6e30'; ctx.beginPath();
-        ctx.moveTo(px - 4, py); ctx.lineTo(px - 6, py - 7); ctx.moveTo(px, py); ctx.lineTo(px, py - 9); ctx.moveTo(px + 4, py); ctx.lineTo(px + 6, py - 7);
-        ctx.stroke();
-      } else if (hv < 0.36 * dk) {
-        ctx.fillStyle = '#8c8a7a'; ctx.beginPath(); ctx.ellipse(px, py, 5, 3.5, 0, 0, TAU); ctx.fill();
-      } else if (hv < 0.39 * dk) {
-        ctx.fillStyle = '#d9c96a'; ctx.beginPath(); ctx.arc(px, py, 2.5, 0, TAU); ctx.fill();
-      }
-    }
-  ctx.strokeStyle = '#3b2f1e'; ctx.lineWidth = 12; ctx.strokeRect(0, 0, WORLD, WORLD);
-}
-
-function drawTerrain(x0, y0, vw, vh) {
-  const vis = (x, y, r) => x + r > x0 && x - r < x0 + vw && y + r > y0 && y - r < y0 + vh;
-  for (const h of HILLS) {
-    const R = h.r * 1.8;
-    if (!vis(h.x, h.y, R)) continue;
-    // 背光面（右下）暗、迎光面（左上）亮
-    let g = ctx.createRadialGradient(h.x + h.r * 0.35, h.y + h.r * 0.35, 0, h.x + h.r * 0.35, h.y + h.r * 0.35, R);
-    g.addColorStop(0, `rgba(30,45,15,${0.2 + h.h / 600})`); g.addColorStop(1, 'rgba(30,45,15,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h.x + h.r * 0.35, h.y + h.r * 0.35, R, 0, TAU); ctx.fill();
-    g = ctx.createRadialGradient(h.x - h.r * 0.25, h.y - h.r * 0.25, 0, h.x - h.r * 0.25, h.y - h.r * 0.25, h.r * 1.3);
-    g.addColorStop(0, `rgba(255,250,200,${0.16 + h.h / 600})`); g.addColorStop(1, 'rgba(255,250,200,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h.x - h.r * 0.25, h.y - h.r * 0.25, h.r * 1.3, 0, TAU); ctx.fill();
-    // 等高线
-    ctx.strokeStyle = 'rgba(40,50,20,.38)'; ctx.lineWidth = 2.5;
-    for (let lv = 30; lv < h.h; lv += 40) {
-      const rr = h.r * Math.sqrt(Math.log(h.h / lv));
-      ctx.beginPath(); ctx.arc(h.x, h.y, rr, 0, TAU); ctx.stroke();
-    }
-  }
-  for (const m of MUDS) {
-    if (!vis(m.x, m.y, m.r * 1.6)) continue;
-    ctx.fillStyle = '#4e3a22';
-    for (const b of m.blobs) { ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 5, 0, TAU); ctx.fill(); }
-    ctx.fillStyle = '#6e5432';
-    for (const b of m.blobs) { ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill(); }
-    ctx.fillStyle = 'rgba(150,170,180,.35)';
-    for (const b of m.blobs) { ctx.beginPath(); ctx.ellipse(b.x - b.r * 0.3, b.y - b.r * 0.2, b.r * 0.25, b.r * 0.12, 0.3, 0, TAU); ctx.fill(); }
   }
 }
 
