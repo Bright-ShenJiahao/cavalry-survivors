@@ -69,6 +69,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:n
 <div id="dbg"><div class="hd" id="dbgHd"><span>调试面板</span><span id="dbgArrow">▲</span></div><div class="bd" id="dbgBd"></div></div>
 <script src="assets/horse8/meta.js"></script>
 <script src="assets/rider/meta.js"></script>
+<script src="assets/hero8/meta.js"></script>
 <script>
 'use strict';
 const FORCE_DEBUG = false;
@@ -940,6 +941,28 @@ function riderH8(o, tint, rd) {
   ctx.restore();
   return true;
 }
+// ===== 人马一体的 8 方向精灵（5 方向切图 + 左侧翻转） =====
+const COMBO_IMG = {};
+for (const nm of Object.keys(window.COMBO || {})) for (const d of COMBO[nm].dirs) for (let i = 0; i < 8; i++) { const im = new Image(); im.src = `assets/${nm}/${d}${i}.png`; COMBO_IMG[nm + d + i] = im; }
+function comboDraw(o, nm) {
+  const C = window.COMBO && COMBO[nm]; if (!C) return false;
+  const sx = Math.cos(o.a), sy = Math.sin(o.a) * SQ;
+  const sec = ((Math.round(Math.atan2(sy, sx) / (Math.PI / 4)) % 8) + 8) % 8;
+  const [dn, flip] = H8_SECT[sec], di = C.dirs.indexOf(dn);
+  const fi = o.v < 15 ? Math.floor(S.t * 1.6) % 2 : 2 + Math.floor(o.anim || 0) % 6;
+  const im = COMBO_IMG[nm + dn + fi], F = C.frames[di] && C.frames[di][fi];
+  if (!ready(im) || !F) return false;
+  shadow3(o.x, o.y, dn === 'S' || dn === 'N' ? 12 : 24, 9, 0);
+  if (!o.dead && ratio(o) >= P.charge) chargeAura3(o);
+  const p = P3(o.x, o.y, o.z || 0);
+  ctx.save();
+  if (o.dead) ctx.globalAlpha = clamp(o.fly * 3, 0, 1);
+  if (o.flash > 0) ctx.globalAlpha *= 0.45;
+  ctx.translate(p[0], p[1] - F.up); if (flip < 0) ctx.scale(-1, 1);
+  ctx.drawImage(im, -F.ax, -F.h, F.w, F.h);
+  ctx.restore();
+  return true;
+}
 function HORSEMETA(di, fi) { return window.HORSE8 && HORSE8.frames[di] && HORSE8.frames[di][fi]; }
 const RD_HERO = { key: 'hero', body: '#f2f2f2', ring: '#222', lance: '#d0d0d0', head: '#e8c49a' };
 const RD_GUARD = { key: 'guard', body: '#3a5fc8', ring: '#b8bcc4' };
@@ -955,7 +978,7 @@ function draw3(dt) {
   for (const o of list) {
     if (A) {
       let done = false;
-      if (o === S.h) done = (P.horse8 && riderH8(o, null, RD_HERO)) || riderSpr3(o, A.hero[o.v < 15 ? 0 : Math.floor(o.anim) % 6], 50);
+      if (o === S.h) done = (P.horse8 && (comboDraw(o, 'hero8') || riderH8(o, null, RD_HERO))) || riderSpr3(o, A.hero[o.v < 15 ? 0 : Math.floor(o.anim) % 6], 50);
       else if (!o.type) { done = (P.horse8 && riderH8(o, [150, 96, 58], RD_GUARD)) || riderSpr3(o, A.guard, 50); if (done && o.hp < o.max) bar3(o, 26, 56, '#4c4'); }
       else if (o.type === 'cav') { done = (P.horse8 && riderH8(o, [92, 58, 38], RD_CAV)) || riderSpr3(o, A.cav, 52); if (done && !o.dead && o.hp < o.max) bar3(o, 26, 58, '#e44'); }
       else if (o.type === 'grunt' || o.type === 'pha' || o.type === 'brute') {
