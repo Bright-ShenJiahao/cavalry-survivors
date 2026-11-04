@@ -6,7 +6,7 @@
 <title>骑兵幸存者 · 原型</title>
 <style>
 html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:none;-webkit-user-select:none;user-select:none;font-family:system-ui,sans-serif}
-canvas{display:block;position:fixed;inset:0;width:100vw;height:100vh}
+#c{display:block;position:fixed;inset:0;width:100vw;height:100vh}
 #dbg{position:fixed;top:6px;right:6px;z-index:2;background:rgba(0,0,0,.62);color:#fff;font-size:12px;border-radius:6px;width:220px;display:none;max-height:calc(100vh - 12px);overflow:auto}
 #dbg .hd{padding:6px 8px;font-weight:bold;cursor:pointer;display:flex;justify-content:space-between}
 #dbg .bd{padding:0 8px 8px}
@@ -14,10 +14,49 @@ canvas{display:block;position:fixed;inset:0;width:100vw;height:100vh}
 #dbg .t{display:flex;justify-content:space-between}
 #dbg input[type=range]{width:100%;margin:2px 0}
 #dbg button{margin-top:4px;width:100%;padding:4px}
+#main-menu{position:fixed;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;gap:clamp(24px,8vw,140px);padding:24px;box-sizing:border-box;background:linear-gradient(100deg,#07101b99,#050c1660);color:#f5f7fb;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+#main-menu[hidden]{display:none}
+.mm-profile{width:290px;flex-shrink:0;text-align:center}
+.mm-eyebrow{font-size:11px;letter-spacing:.45em;color:#c9d8e8;margin-bottom:10px}
+.mm-title{font-family:serif;font-size:46px;letter-spacing:.08em;color:#f7d987;text-shadow:0 3px #513c1c,0 6px 20px #000;margin:0;white-space:nowrap}
+.mm-sub{font-size:13px;letter-spacing:.3em;color:#e9d9a8;margin:4px 0 22px;text-shadow:0 2px #000}
+.mm-card{width:218px;height:168px;margin:auto;border:2px solid #77baff;border-radius:10px;background:radial-gradient(ellipse at 50% 92%,#37578b88,transparent 65%),#101e38c8;box-shadow:0 0 0 3px #0d1938aa,0 14px 38px #0005;display:grid;place-items:center}
+.mm-card canvas{width:200px;height:150px}
+.mm-name{display:block;width:222px;margin:16px auto 0}
+.mm-name input{box-sizing:border-box;width:100%;padding:11px 14px;border:1px solid #729bd07a;border-radius:6px;background:#0c172ac9;color:#fff;font:16px system-ui;outline:none;text-align:center}
+.mm-panel{box-sizing:border-box;width:360px;padding:22px;border:2px solid #b6d5ff;border-radius:12px;background:linear-gradient(145deg,#254f9cdd,#142858d9);box-shadow:0 0 0 3px #101c35aa,0 18px 60px #0005}
+.mm-panel button{cursor:pointer;font:inherit;color:inherit}
+.mm-start{display:block;width:100%;text-align:left;padding:16px 18px;margin-bottom:18px;border:1px solid #a2cbff88;border-radius:7px;background:#72a9f62b;font-size:23px!important;font-weight:700}
+.mm-start:hover{background:#8bbcff40}
+.mm-start small{display:block;font-size:12px;font-weight:400;letter-spacing:.04em;color:#d4e4fc;margin-top:5px}
+.mm-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mm-grid button{font-size:14px;padding:12px 10px;border:1px solid #83abe354;border-radius:5px;background:#0c225a55;text-align:left;color:#ecf5ff}
+.mm-grid button:hover{background:#77a9f044;border-color:#c1e0ff}
+.mm-note{color:#c3d3ef;font-size:12px;line-height:1.7;margin-top:16px;border-top:1px solid #9ebfe432;padding-top:12px}
+@media (max-height:520px){#main-menu{gap:28px;padding:12px}.mm-title{font-size:34px}.mm-sub{margin-bottom:12px}.mm-card{width:180px;height:130px}.mm-card canvas{width:170px;height:122px}.mm-name{margin-top:10px;width:190px}.mm-name input{padding:8px}.mm-panel{width:320px;padding:16px}.mm-start{padding:11px 14px;margin-bottom:12px;font-size:20px!important}.mm-grid button{padding:9px 10px}.mm-note{display:none}.mm-eyebrow{margin-bottom:4px}}
+@media (max-width:640px) and (orientation:portrait){#main-menu{flex-direction:column;gap:18px}}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="main-menu" hidden>
+  <div class="mm-profile">
+    <div class="mm-eyebrow">穿 越 者 的 冲 锋</div>
+    <h1 class="mm-title">骑兵幸存者</h1>
+    <div class="mm-sub">CAVALRY SURVIVORS</div>
+    <div class="mm-card"><canvas id="mm-hero" width="400" height="300"></canvas></div>
+    <label class="mm-name"><input id="mm-name" maxlength="12" placeholder="输入你的名字"></label>
+  </div>
+  <div class="mm-panel">
+    <button class="mm-start" id="mm-start">开始冲锋<small>第一章 · 高加米拉　公元前 331 年</small></button>
+    <div class="mm-grid">
+      <button>⚔ 备战</button><button>🐎 名马</button>
+      <button>🗺 战役地图</button><button>⬆ 永久强化</button>
+      <button>📖 图鉴</button><button>🏆 英雄榜</button>
+    </div>
+    <div class="mm-note">拖动屏幕任意位置控制方向，推得越远跑得越快；往身后推是刹车。速度越快，冲撞和挥砍伤害越高。</div>
+  </div>
+</div>
 <div id="dbg"><div class="hd" id="dbgHd"><span>调试面板</span><span id="dbgArrow">▲</span></div><div class="bd" id="dbgBd"></div></div>
 <script>
 'use strict';
@@ -142,13 +181,13 @@ function setGuards(n) {
   for (let i = S.g.length; i < n; i++) S.g.push(makeGuard(i, S.h));
   S.g.forEach((g, i) => { const m = makeGuard(i, S.h); g.ox = m.ox; g.oy = m.oy; });
 }
-function reset() {
+function reset(demo) {
   S = {
     t: 0, kills: 0, dead: false,
     h: { x: WORLD / 2, y: WORLD / 2, a: -Math.PI / 2, v: 0, hp: 100, max: 100, slashT: 0, slashAnim: 0, flash: 0, leader: true },
     g: [], en: [], nums: [], dust: [],
     spawnAcc: 0, bruteT: 15, cavT: 0, cam: { x: WORLD / 2, y: WORLD / 2 },
-    boss: null, won: false, msg: '', msgT: 0,
+    boss: null, won: false, msg: '', msgT: 0, demo: !!demo, demoA: 0,
   };
   setGuards(P.guards);
 }
@@ -160,6 +199,7 @@ addEventListener('keydown', e => { keys[e.code] = true; if ((S.dead || S.won) &&
 addEventListener('keyup', e => { keys[e.code] = false; });
 const joy = { on: false, id: null, bx: 0, by: 0, x: 0, y: 0, R: 60 };
 cv.addEventListener('pointerdown', e => {
+  if (S.demo) return;
   if (S.dead || S.won) { reset(); return; }
   joy.on = true; joy.id = e.pointerId; joy.bx = joy.x = e.clientX; joy.by = joy.y = e.clientY;
   cv.setPointerCapture(e.pointerId);
@@ -169,6 +209,11 @@ const joyEnd = e => { if (e.pointerId === joy.id) { joy.on = false; joy.id = nul
 cv.addEventListener('pointerup', joyEnd); cv.addEventListener('pointercancel', joyEnd);
 
 function getInput() {
+  if (S.demo) {   // 主界面背景：自动驾驶，绕大圈冲杀
+    const C = WORLD / 2, tx = C + Math.cos(S.demoA) * 650, ty = C + Math.sin(S.demoA * 1.3) * 450;
+    const dx = tx - S.h.x, dy = ty - S.h.y, d = Math.hypot(dx, dy) || 1;
+    return { x: dx / d, y: dy / d, m: 0.9 };
+  }
   const r = rawInput();
   if (r.m > 0 && P.view25) { const x = r.x, y = r.y / P.squash, n = Math.hypot(x, y); r.x = x / n; r.y = y / n; }
   return r;
@@ -301,6 +346,7 @@ function phaSlot(B, half, i, row) {
   return [x, B.cy - B.side * row * 24];
 }
 function updBoss(dt) {
+  if (S.demo) { S.demoA += 0.0045; return; }
   if (!S.boss && S.t >= P.bossTime) startBoss();
   const B = S.boss; if (!B) return;
   const L = S.h, hw = PHA_N * PHA_SP / 2;
@@ -345,7 +391,7 @@ function hit(e, dmg, kx, ky, kp) {
 }
 
 function hurtRider(rd, dmg, show) {
-  if (P.god) return;
+  if (P.god || S.demo) return;
   rd.hp -= dmg;
   if (show) { rd.flash = 0.12; addNum(rd.x, rd.y - 14, Math.round(dmg), '#ff5050', false); }
 }
@@ -924,10 +970,31 @@ function frame(now) {
     drawNums(fdt, false);
     ctx.restore();
   }
-  drawHUD();
+  if (!S.demo) drawHUD();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// ===== 主界面 =====
+const MENU = !new URLSearchParams(location.search).has('nomenu');
+const mm = document.getElementById('main-menu');
+function openMenu() { reset(true); mm.hidden = false; }
+document.getElementById('mm-start').onclick = () => { mm.hidden = true; reset(false); };
+try { const nm = localStorage.getItem('cs_name'); if (nm) document.getElementById('mm-name').value = nm; } catch (e) {}
+document.getElementById('mm-name').addEventListener('input', ev => { try { localStorage.setItem('cs_name', ev.target.value); } catch (e) {} });
+(function heroCard() {   // 角色卡里的主角奔跑动画
+  const c = document.getElementById('mm-hero'), x = c.getContext('2d');
+  let t = 0;
+  (function loop() {
+    t += 1 / 60;
+    const A = ARTS[P.art] || ARTS.retro, im = A.hero[Math.floor(t * 10) % 6];
+    x.clearRect(0, 0, c.width, c.height);
+    x.fillStyle = 'rgba(0,0,0,.3)'; x.beginPath(); x.ellipse(200, 262, 120, 16, 0, 0, TAU); x.fill();
+    if (ready(im)) { const h = 210, w = im.naturalWidth * h / im.naturalHeight; x.drawImage(im, 200 - w / 2, 262 - h + Math.abs(Math.sin(t * 10)) * 4, w, h); }
+    if (!mm.hidden) requestAnimationFrame(loop); else setTimeout(() => requestAnimationFrame(loop), 300);
+  })();
+})();
+if (MENU) openMenu();
 
 // ===== 调试面板 =====
 if (DEBUG) {
