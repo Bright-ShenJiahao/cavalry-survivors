@@ -42,6 +42,8 @@ const P = {
   spawnMul: 1,       // 刷怪倍率
   zoom: 1,           // 镜头缩放倍率
   god: false,        // 无敌
+  view25: true,      // 2.5D 视角
+  squash: 0.6,       // 2.5D 地面压扁比例
 };
 const SLIDERS = [
   ['maxSpeed', '最高速度', 120, 700, 10],
@@ -56,6 +58,7 @@ const SLIDERS = [
   ['cavStart', '敌骑出现时间(秒)', 0, 180, 5],
   ['spawnMul', '刷怪倍率', 0, 4, 0.1],
   ['zoom', '镜头缩放', 0.5, 2, 0.05],
+  ['squash', '2.5D 压扁比例', 0.4, 1, 0.02],
 ];
 
 const WORLD = 4000;
@@ -81,7 +84,7 @@ function makeGuard(i, L) {
   const row = Math.floor(i / 2) + 1, side = i % 2 ? 1 : -1;
   const ox = -36 * row, oy = side * 28 * row;
   const ca = Math.cos(L.a), sa = Math.sin(L.a);
-  return { x: L.x + ca * ox - sa * oy, y: L.y + sa * ox + ca * oy, a: L.a, v: L.v, ox, oy, hp: 60, max: 60, slashT: rand(0, 0.5), slashAnim: 0, flash: 0 };
+  return { x: L.x + ca * ox - sa * oy, y: L.y + sa * ox + ca * oy, a: L.a, v: L.v, ox, oy, phase: rand(0, 6), hp: 60, max: 60, slashT: rand(0, 0.5), slashAnim: 0, flash: 0 };
 }
 function setGuards(n) {
   S.g = S.g.slice(0, n);
@@ -114,6 +117,11 @@ const joyEnd = e => { if (e.pointerId === joy.id) { joy.on = false; joy.id = nul
 cv.addEventListener('pointerup', joyEnd); cv.addEventListener('pointercancel', joyEnd);
 
 function getInput() {
+  const r = rawInput();
+  if (r.m > 0 && P.view25) { const x = r.x, y = r.y / P.squash, n = Math.hypot(x, y); r.x = x / n; r.y = y / n; }
+  return r;
+}
+function rawInput() {
   let x = 0, y = 0;
   if (keys.KeyA || keys.ArrowLeft) x--;
   if (keys.KeyD || keys.ArrowRight) x++;
@@ -196,7 +204,7 @@ function updRiders(dt) {
 
 // ===== 敌人 =====
 function spawnPos() {
-  const z = baseZoom(), dist = Math.hypot(W, H) / z / 2 + 60, ang = Math.random() * TAU;
+  const z = baseZoom(), dist = Math.hypot(W, H / (P.view25 ? P.squash : 1)) / z / 2 + 60, ang = Math.random() * TAU;
   return [clamp(S.h.x + Math.cos(ang) * dist, 20, WORLD - 20), clamp(S.h.y + Math.sin(ang) * dist, 20, WORLD - 20)];
 }
 function spawn(type) {
@@ -211,6 +219,7 @@ function addNum(x, y, txt, col, big) {
   S.nums.push({ x: x + rand(-6, 6), y: y - 10, txt: String(txt), t: 0.8, col, big });
 }
 
+const GRAV = 1400;
 function hit(e, dmg, kx, ky, kp) {
   if (e.dead) return;
   e.hp -= dmg; e.flash = 0.1;
@@ -220,6 +229,7 @@ function hit(e, dmg, kx, ky, kp) {
     e.fly = kp > 450 ? 0.7 : 0.4;
     e.fvx = kx * kp + rand(-80, 80); e.fvy = ky * kp + rand(-80, 80);
     e.spin = rand(-14, 14); e.rot = 0;
+    e.z = 0; e.vz = GRAV * e.fly / 2;
   }
 }
 
@@ -260,6 +270,7 @@ function updEnemies(dt) {
     if (e.dead) {
       e.fly -= dt; e.x += e.fvx * dt; e.y += e.fvy * dt;
       e.fvx *= 0.94; e.fvy *= 0.94; e.rot += e.spin * dt;
+      e.z += e.vz * dt; e.vz -= GRAV * dt; if (e.z < 0) { e.z = 0; e.vz = 0; }
       continue;
     }
     if (e.cd > 0) e.cd -= dt;
@@ -376,8 +387,8 @@ function updSlash(dt) {
 // ===== 绘制 =====
 function hash(x, y) { let n = x * 374761393 + y * 668265263; n = (n ^ (n >> 13)) * 1274126177; return ((n ^ (n >> 16)) >>> 0) / 4294967296; }
 
-function drawGround(z) {
-  const vw = W / z, vh = H / z, x0 = S.cam.x - vw / 2, y0 = S.cam.y - vh / 2;
+function drawGround(zx, zy) {
+  const vw = W / zx, vh = H / zy, x0 = S.cam.x - vw / 2, y0 = S.cam.y - vh / 2;
   ctx.fillStyle = '#2d2a24'; ctx.fillRect(x0, y0, vw, vh);
   ctx.fillStyle = '#6f8f4a'; ctx.fillRect(0, 0, WORLD, WORLD);
   const B = 400;
@@ -461,7 +472,7 @@ function drawEnemies() {
       continue;
     }
     ctx.save(); ctx.translate(e.x, e.y);
-    if (e.dead) { ctx.rotate(e.rot); ctx.globalAlpha = Math.max(0, Math.min(1, e.fly * 3)); }
+    if (e.dead) { ctx.scale(1 + e.z / 120, 1 + e.z / 120); ctx.rotate(e.rot); ctx.globalAlpha = Math.max(0, Math.min(1, e.fly * 3)); }
     ctx.fillStyle = e.flash > 0 ? '#fff' : (e.type === 'brute' ? '#5b3a6e' : '#b8432f');
     ctx.strokeStyle = '#2a1410'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(0, 0, e.r, 0, TAU); ctx.fill(); ctx.stroke();
@@ -474,19 +485,111 @@ function drawEnemies() {
   }
 }
 
-function drawFx(dt) {
-  for (const d of S.dust) { d.t -= dt; ctx.fillStyle = `rgba(200,180,130,${Math.max(0, d.t)})`; ctx.beginPath(); ctx.arc(d.x, d.y, d.r * (1.5 - d.t), 0, TAU); ctx.fill(); }
+function drawDust(dt, three) {
+  for (const d of S.dust) {
+    d.t -= dt;
+    const p = three ? P3(d.x, d.y, (0.5 - d.t) * 20) : [d.x, d.y];
+    ctx.fillStyle = `rgba(200,180,130,${Math.max(0, d.t)})`; ctx.beginPath(); ctx.arc(p[0], p[1], d.r * (1.5 - d.t), 0, TAU); ctx.fill();
+  }
   S.dust = S.dust.filter(d => d.t > 0);
+}
+function drawNums(dt, three) {
   ctx.textAlign = 'center'; ctx.lineWidth = 3;
   for (const n of S.nums) {
     n.t -= dt; n.y -= 40 * dt;
+    const p = three ? P3(n.x, n.y, 40) : [n.x, n.y];
     ctx.globalAlpha = clamp(n.t * 2.5, 0, 1);
     ctx.font = `bold ${n.big ? 20 : 14}px system-ui,sans-serif`;
-    ctx.strokeStyle = '#000'; ctx.strokeText(n.txt, n.x, n.y);
-    ctx.fillStyle = n.col; ctx.fillText(n.txt, n.x, n.y);
+    ctx.strokeStyle = '#000'; ctx.strokeText(n.txt, p[0], p[1]);
+    ctx.fillStyle = n.col; ctx.fillText(n.txt, p[0], p[1]);
   }
   ctx.globalAlpha = 1;
   S.nums = S.nums.filter(n => n.t > 0);
+}
+
+// ===== 2.5D 绘制 =====
+let SQ = 1;
+function P3(x, y, h) { return [x - S.cam.x, (y - S.cam.y) * SQ - h]; }
+function L3(o, f, sd, h) { const c = Math.cos(o.a), n = Math.sin(o.a); return P3(o.x + c * f - n * sd, o.y + n * f + c * sd, h + (o.z || 0)); }
+function seg(a, b, w, col) { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+function shadow3(x, y, rx, ry, a) {
+  const p = P3(x, y, 0);
+  ctx.save(); ctx.translate(p[0], p[1]); ctx.scale(1, SQ); ctx.rotate(a || 0);
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, TAU); ctx.fill(); ctx.restore();
+}
+function drawRider3(o, st, charging) {
+  const s = st.s, k = (f, sd, h) => L3(o, f * s, sd * s, h * s);
+  const ph = S.t * (6 + 14 * ratio(o)) + (o.phase || 0), amp = 5 * Math.min(1, o.v / 60);
+  shadow3(o.x, o.y, 24 * s, 10 * s, o.a);
+  if (charging) {
+    const a = k(42, 0, 0), b = k(16, -18, 0), c = k(16, 18, 0);
+    ctx.fillStyle = `rgba(255,140,40,${0.25 + 0.2 * Math.sin(S.t * 30)})`;
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.closePath(); ctx.fill();
+  }
+  ctx.lineCap = 'round';
+  const dark = '#3a2e22', hc = o.flash > 0 ? '#fff' : st.horse;
+  for (const [f, sd, off] of [[12, -5, 0], [12, 5, Math.PI], [-12, -5, Math.PI / 2], [-12, 5, Math.PI * 1.5]])
+    seg(k(f, sd, 13), k(f + Math.sin(ph + off) * amp, sd, Math.max(0, Math.cos(ph + off)) * amp * 0.6), 3 * s, dark);
+  const bob = Math.abs(Math.sin(ph)) * amp * 0.4;
+  const b0 = k(-17, 0, 17 + bob), b1 = k(15, 0, 19 + bob);
+  seg(b0, b1, 17 * s, dark); seg(b0, b1, 14 * s, hc);
+  const n0 = k(13, 0, 21 + bob), n1 = k(23, 0, 31 + bob), hd = k(30, 0, 27 + bob);
+  seg(n0, n1, 9 * s, dark); seg(n1, hd, 8 * s, dark); seg(n0, n1, 6.5 * s, hc); seg(n1, hd, 5.5 * s, hc);
+  seg(k(-18, 0, 18 + bob), k(-25, 0, 8 + bob), 3 * s, dark);
+  const t0 = k(-2, 0, 24 + bob), t1 = k(-1, 0, 37 + bob);
+  seg(t0, t1, 12 * s, st.ring); seg(t0, t1, 9 * s, st.rider);
+  const hp = k(-1, 0, 44 + bob);
+  ctx.fillStyle = st.rider; ctx.strokeStyle = st.ring; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(hp[0], hp[1], 5 * s, 0, TAU); ctx.fill(); ctx.stroke();
+  seg(k(-6, 7, 30 + bob), k(32, 11, 34 + bob), 2 * s, '#ddd');
+  ctx.lineCap = 'butt';
+}
+function drawFoot3(e) {
+  const big = e.type === 'brute', r = e.r, zz = e.z || 0, hgt = big ? 30 : 16;
+  const sh = 1 / (1 + zz / 80);
+  shadow3(e.x, e.y, r * sh, r * 0.6 * sh, 0);
+  const p = P3(e.x, e.y, zz);
+  ctx.save(); ctx.translate(p[0], p[1] - hgt / 2);
+  if (e.dead) { ctx.rotate(e.rot); ctx.globalAlpha = clamp(e.fly * 3, 0, 1); }
+  ctx.translate(0, hgt / 2);
+  ctx.lineCap = 'round';
+  const col = e.flash > 0 ? '#fff' : (big ? '#5b3a6e' : '#b8432f');
+  seg([0, -r * 0.6], [0, -hgt], r * 1.5 + 3, '#2a1410'); seg([0, -r * 0.6], [0, -hgt], r * 1.5, col);
+  ctx.fillStyle = '#d9a877'; ctx.strokeStyle = '#2a1410'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(0, -hgt - r * 0.55, r * 0.6, 0, TAU); ctx.fill(); ctx.stroke();
+  if (!big) { ctx.fillStyle = '#e8c34a'; ctx.fillRect(-r * 0.6, -hgt - r * 0.85, r * 1.2, 2.5); }
+  ctx.lineCap = 'butt';
+  ctx.restore();
+}
+function bar3(o, w, h, col) {
+  const p = P3(o.x, o.y, h);
+  ctx.fillStyle = '#000'; ctx.fillRect(p[0] - w / 2, p[1], w, 4);
+  ctx.fillStyle = col; ctx.fillRect(p[0] - w / 2, p[1], w * Math.max(0, o.hp) / o.max, 4);
+}
+function drawSlash3(o, R) {
+  if (o.slashAnim <= 0) return;
+  const k = o.slashAnim / 0.18, p = P3(o.x, o.y, 0);
+  ctx.save(); ctx.translate(p[0], p[1]); ctx.scale(1, SQ);
+  ctx.strokeStyle = `rgba(255,255,255,${k * 0.8})`; ctx.lineWidth = 5;
+  const st = o.a + (1 - k) * TAU;
+  ctx.beginPath(); ctx.arc(0, 0, R, st - 1.5, st); ctx.stroke();
+  ctx.restore();
+}
+function draw3(dt) {
+  drawDust(dt, true);
+  for (const g of S.g) drawSlash3(g, GSLASH_R);
+  drawSlash3(S.h, SLASH_R);
+  const list = [...S.en, ...S.g, S.h].sort((a, b) => a.y - b.y);
+  for (const o of list) {
+    if (o === S.h) drawRider3(o, ST_LEADER, ratio(o) >= P.charge);
+    else if (!o.type) { drawRider3(o, ST_GUARD, ratio(o) >= P.charge); if (o.hp < o.max) bar3(o, 26, 52, '#4c4'); }
+    else if (o.type === 'cav') {
+      ctx.save(); if (o.dead) ctx.globalAlpha = clamp(o.fly * 3, 0, 1);
+      drawRider3(o, ST_CAV, !o.dead && o.v > P.maxSpeed * 0.6); ctx.restore();
+      if (!o.dead && o.hp < o.max) bar3(o, 26, 50, '#e44');
+    } else { drawFoot3(o); if (o.type === 'brute' && !o.dead) bar3(o, 40, 56, '#e44'); }
+  }
+  drawNums(dt, true);
 }
 
 function drawHUD() {
@@ -536,14 +639,25 @@ function frame(now) {
   S.cam.x += (tx - S.cam.x) * k; S.cam.y += (ty - S.cam.y) * k;
 
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  ctx.save();
-  ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-S.cam.x, -S.cam.y);
-  drawGround(z);
-  drawEnemies();
-  for (const g of S.g) { drawRider(g, ST_GUARD, ratio(g) >= P.charge); hpBar(g, 26); drawSlash(g, GSLASH_R); }
-  drawRider(h, ST_LEADER, ratio(h) >= P.charge); drawSlash(h, SLASH_R);
-  drawFx(S.dead ? 0 : dt);
-  ctx.restore();
+  const fdt = S.dead ? 0 : dt;
+  if (P.view25) {
+    SQ = P.squash;
+    ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z * SQ); ctx.translate(-S.cam.x, -S.cam.y);
+    drawGround(z, z * SQ); ctx.restore();
+    ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z);
+    draw3(fdt);
+    ctx.restore();
+  } else {
+    ctx.save();
+    ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-S.cam.x, -S.cam.y);
+    drawGround(z, z);
+    drawDust(fdt, false);
+    drawEnemies();
+    for (const g of S.g) { drawRider(g, ST_GUARD, ratio(g) >= P.charge); hpBar(g, 26); drawSlash(g, GSLASH_R); }
+    drawRider(h, ST_LEADER, ratio(h) >= P.charge); drawSlash(h, SLASH_R);
+    drawNums(fdt, false);
+    ctx.restore();
+  }
   drawHUD();
   requestAnimationFrame(frame);
 }
@@ -562,6 +676,10 @@ if (DEBUG) {
     });
     bd.appendChild(l);
   }
+  const v = document.createElement('label');
+  v.innerHTML = '<input type="checkbox" checked> 2.5D 视角（关掉 = 正俯视）';
+  v.querySelector('input').addEventListener('change', ev => { P.view25 = ev.target.checked; });
+  bd.appendChild(v);
   const g = document.createElement('label');
   g.innerHTML = '<input type="checkbox"> 无敌';
   g.querySelector('input').addEventListener('change', ev => { P.god = ev.target.checked; });
