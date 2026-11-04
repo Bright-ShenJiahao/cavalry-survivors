@@ -35,7 +35,9 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:n
 .mm-note{color:#c3d3ef;font-size:12px;line-height:1.7;margin-top:16px;border-top:1px solid #9ebfe432;padding-top:12px}
 @media (max-height:520px){#main-menu{gap:28px;padding:12px}.mm-title{font-size:34px}.mm-sub{margin-bottom:12px}.mm-card{width:180px;height:130px}.mm-card canvas{width:170px;height:122px}.mm-name{margin-top:10px;width:190px}.mm-name input{padding:8px}.mm-panel{width:320px;padding:16px}.mm-start{padding:11px 14px;margin-bottom:12px;font-size:20px!important}.mm-grid button{padding:9px 10px}.mm-note{display:none}.mm-eyebrow{margin-bottom:4px}}
 @media (max-width:640px) and (orientation:portrait){#main-menu{flex-direction:column;gap:18px}}
-#loading{position:fixed;inset:0;z-index:20;background:#1a1208 center bottom/cover no-repeat;transition:opacity .6s;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+#loading .ld-bg{position:absolute;inset:-30px;background:center/cover no-repeat;filter:blur(18px) brightness(.6)}
+#loading .ld-img{position:absolute;inset:0;background:center/contain no-repeat}
+#loading{position:fixed;inset:0;z-index:20;overflow:hidden;background:#1a1208;transition:opacity .6s;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
 #loading.out{opacity:0;pointer-events:none}
 #loading .ld-foot{position:absolute;left:0;right:0;bottom:5%;display:flex;flex-direction:column;align-items:center;gap:10px}
 #loading .ld-title{font-family:serif;font-size:clamp(30px,6vw,64px);letter-spacing:.08em;color:#f7d987;text-shadow:0 3px #513c1c,0 0 18px #000,0 6px 24px #000}
@@ -46,7 +48,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:n
 </style>
 </head>
 <body>
-<div id="loading"><div class="ld-foot"><div class="ld-title">骑兵幸存者</div><div class="ld-bar"><i id="ld-fill"></i></div><div class="ld-tip" id="ld-tip">正在穿越到高加米拉……</div></div></div>
+<div id="loading"><div class="ld-bg"></div><div class="ld-img"></div><div class="ld-foot"><div class="ld-title">骑兵幸存者</div><div class="ld-bar"><i id="ld-fill"></i></div><div class="ld-tip" id="ld-tip">正在穿越到高加米拉……</div></div></div>
 <canvas id="c"></canvas>
 <div id="main-menu" hidden>
   <div class="mm-profile">
@@ -70,6 +72,10 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:n
 <script src="assets/horse8/meta.js"></script>
 <script src="assets/rider/meta.js"></script>
 <script src="assets/hero8/meta.js"></script>
+<script src="assets/comp8/meta.js"></script>
+<script src="assets/pcav8/meta.js"></script>
+<script src="assets/spara/meta.js"></script>
+<script src="assets/immortal/meta.js"></script>
 <script>
 'use strict';
 const FORCE_DEBUG = false;
@@ -357,7 +363,7 @@ function startBoss() {
   // 大流士和近卫
   const dy = cy + side * 260;
   S.en.push({ type: 'dar', x: cx, y: dy, r: 18, hp: 1200, max: 1200, a: side > 0 ? -Math.PI / 2 : Math.PI / 2, v: 0, cd: 0, flash: 0, flee: false });
-  for (let k = 0; k < 12; k++) S.en.push({ type: 'grunt', x: cx + rand(-120, 120), y: dy + rand(-60, 60), r: 9, hp: 30, max: 30, sp: rand(55, 75), cd: 0, flash: 0 });
+  for (let k = 0; k < 12; k++) S.en.push({ imm: true, type: 'grunt', x: cx + rand(-120, 120), y: dy + rand(-60, 60), r: 9, hp: 30, max: 30, sp: rand(55, 75), cd: 0, flash: 0 });
   showMsg('大流士的阵线出现了！往一侧跑，把阵线拉开缺口', 5);
 }
 function phaSlot(B, half, i, row) {
@@ -465,7 +471,8 @@ function updEnemies(dt) {
       // 横阵步兵：只回自己的阵位，不追人
       const [sx, sy] = phaSlot(S.boss, e.half, e.i, e.row);
       const dx = sx - e.x, dy = sy - e.y, d = Math.hypot(dx, dy);
-      if (d > 2) { const sp = Math.min(d / dt, 160); e.x += dx / d * sp * dt; e.y += dy / d * sp * dt; }
+      if (d > 2) { const sp = Math.min(d / dt, 160); e.x += dx / d * sp * dt; e.y += dy / d * sp * dt; e.wk = (e.wk || 0) + dt * sp * 0.11; }
+      e.fa = Math.atan2(L.y - e.y, L.x - e.x);
     } else if (e.type === 'char') {
       // 镰刀战车：直线冲锋，几乎不转弯
       e.life -= dt; if (e.life <= 0) e.gone = true;
@@ -505,6 +512,7 @@ function updEnemies(dt) {
         }
       }
       e.x += mx * dt; e.y += my * dt;
+      e.fa = Math.atan2(my, mx); e.wk = (e.wk || Math.random() * 6) + dt * Math.hypot(mx, my) * 0.11;
     }
 
     // 与每个骑手碰撞
@@ -963,6 +971,35 @@ function comboDraw(o, nm) {
   ctx.restore();
   return true;
 }
+// ===== 步兵 8 方向精灵（5 方向 × 行走 6 帧 + 被撞飞 1 帧） =====
+const FOOT_IMG = {};
+for (const nm of Object.keys(window.FOOT || {})) {
+  for (const d of FOOT[nm].dirs) for (let i = 0; i < 6; i++) { const im = new Image(); im.src = `assets/${nm}/${d}${i}.png`; FOOT_IMG[nm + d + i] = im; }
+  const im = new Image(); im.src = `assets/${nm}/fly.png`; FOOT_IMG[nm + 'fly'] = im;
+}
+function footDraw(o, nm, sc) {
+  const C = window.FOOT && FOOT[nm]; if (!C) return false;
+  const p = P3(o.x, o.y, o.z || 0), sh = 1 / (1 + (o.z || 0) / 80);
+  if (o.dead) {   // 被撞飞：整张图旋转着飞出去
+    const im = FOOT_IMG[nm + 'fly']; if (!ready(im)) return false;
+    shadow3(o.x, o.y, o.r * sh, o.r * 0.6 * sh, 0);
+    const w = C.fly.w * sc, h = C.fly.h * sc;
+    ctx.save(); ctx.globalAlpha = clamp(o.fly * 3, 0, 1); ctx.translate(p[0], p[1] - h / 2); ctx.rotate(o.rot * 0.3); if ((o.face || 1) < 0) ctx.scale(-1, 1);
+    ctx.drawImage(im, -w / 2, -h / 2, w, h); ctx.restore();
+    return true;
+  }
+  const a = o.fa || 0, sx = Math.cos(a), sy = Math.sin(a) * SQ;
+  const sec = ((Math.round(Math.atan2(sy, sx) / (Math.PI / 4)) % 8) + 8) % 8;
+  const [dn, flip] = H8_SECT[sec], di = C.dirs.indexOf(dn);
+  const fi = Math.floor(o.wk || 0) % 6, im = FOOT_IMG[nm + dn + fi], F = C.frames[di] && C.frames[di][fi];
+  if (!ready(im) || !F) return false;
+  o.face = flip;
+  shadow3(o.x, o.y, o.r * 1.1, o.r * 0.6, 0);
+  ctx.save(); if (o.flash > 0) ctx.globalAlpha = 0.45;
+  ctx.translate(p[0], p[1] - F.up * sc); if (flip < 0) ctx.scale(-1, 1);
+  ctx.drawImage(im, -F.ax * sc, -F.h * sc, F.w * sc, F.h * sc); ctx.restore();
+  return true;
+}
 function HORSEMETA(di, fi) { return window.HORSE8 && HORSE8.frames[di] && HORSE8.frames[di][fi]; }
 const RD_HERO = { key: 'hero', body: '#f2f2f2', ring: '#222', lance: '#d0d0d0', head: '#e8c49a' };
 const RD_GUARD = { key: 'guard', body: '#3a5fc8', ring: '#b8bcc4' };
@@ -979,8 +1016,13 @@ function draw3(dt) {
     if (A) {
       let done = false;
       if (o === S.h) done = (P.horse8 && (comboDraw(o, 'hero8') || riderH8(o, null, RD_HERO))) || riderSpr3(o, A.hero[o.v < 15 ? 0 : Math.floor(o.anim) % 6], 50);
-      else if (!o.type) { done = (P.horse8 && riderH8(o, [150, 96, 58], RD_GUARD)) || riderSpr3(o, A.guard, 50); if (done && o.hp < o.max) bar3(o, 26, 56, '#4c4'); }
-      else if (o.type === 'cav') { done = (P.horse8 && riderH8(o, [92, 58, 38], RD_CAV)) || riderSpr3(o, A.cav, 52); if (done && !o.dead && o.hp < o.max) bar3(o, 26, 58, '#e44'); }
+      else if (!o.type) { done = (P.horse8 && (comboDraw(o, 'comp8') || riderH8(o, [150, 96, 58], RD_GUARD))) || riderSpr3(o, A.guard, 50); if (done && o.hp < o.max) bar3(o, 26, 56, '#4c4'); }
+      else if (o.type === 'cav') { done = (P.horse8 && (comboDraw(o, 'pcav8') || riderH8(o, [92, 58, 38], RD_CAV))) || riderSpr3(o, A.cav, 52); if (done && !o.dead && o.hp < o.max) bar3(o, 26, 58, '#e44'); }
+      else if (P.horse8 && (o.type === 'grunt' || o.type === 'pha' || o.type === 'brute') &&
+        footDraw(o, o.type === 'brute' || o.imm ? 'immortal' : 'spara', o.type === 'brute' ? 1.5 : o.type === 'pha' ? 1.15 : 1)) {
+        if (o.type === 'brute' && !o.dead) bar3(o, 40, 62, '#e44');
+        done = true;
+      }
       else if (o.type === 'grunt' || o.type === 'pha' || o.type === 'brute') {
         const im = o.type === 'grunt' ? A.inf : A.shield, h = o.type === 'grunt' ? 32 : o.type === 'pha' ? 38 : 56;
         const sh = 1 / (1 + (o.z || 0) / 80);
@@ -1143,7 +1185,7 @@ if (MENU) openMenu();
 (function loading() {
   const el = document.getElementById('loading'), fill = document.getElementById('ld-fill'), tip = document.getElementById('ld-tip');
   const bg = new Image();
-  bg.onload = () => { el.style.backgroundImage = `url(${bg.src})`; };
+  bg.onload = () => { for (const c of el.querySelectorAll('.ld-bg,.ld-img')) c.style.backgroundImage = `url(${bg.src})`; };
   bg.src = Math.min(innerWidth, innerHeight) * (window.devicePixelRatio || 1) > 900 ? 'assets/loading.jpg' : 'assets/loading_s.jpg';
   const all = Object.values(ARTS).flatMap(a => [...a.hero, a.guard, a.inf, a.shield, a.cav]);
   const t0 = performance.now();
