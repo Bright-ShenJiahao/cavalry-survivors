@@ -35,9 +35,18 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:n
 .mm-note{color:#c3d3ef;font-size:12px;line-height:1.7;margin-top:16px;border-top:1px solid #9ebfe432;padding-top:12px}
 @media (max-height:520px){#main-menu{gap:28px;padding:12px}.mm-title{font-size:34px}.mm-sub{margin-bottom:12px}.mm-card{width:180px;height:130px}.mm-card canvas{width:170px;height:122px}.mm-name{margin-top:10px;width:190px}.mm-name input{padding:8px}.mm-panel{width:320px;padding:16px}.mm-start{padding:11px 14px;margin-bottom:12px;font-size:20px!important}.mm-grid button{padding:9px 10px}.mm-note{display:none}.mm-eyebrow{margin-bottom:4px}}
 @media (max-width:640px) and (orientation:portrait){#main-menu{flex-direction:column;gap:18px}}
+#loading{position:fixed;inset:0;z-index:20;background:#1a1208 center bottom/cover no-repeat;transition:opacity .6s;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+#loading.out{opacity:0;pointer-events:none}
+#loading .ld-foot{position:absolute;left:0;right:0;bottom:5%;display:flex;flex-direction:column;align-items:center;gap:10px}
+#loading .ld-title{font-family:serif;font-size:clamp(30px,6vw,64px);letter-spacing:.08em;color:#f7d987;text-shadow:0 3px #513c1c,0 0 18px #000,0 6px 24px #000}
+#loading .ld-bar{width:min(420px,60vw);height:12px;border:2px solid #f7d987;border-radius:7px;background:#0008;overflow:hidden;box-shadow:0 2px 10px #000a}
+#loading .ld-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#e2a93a,#f7d987);transition:width .2s}
+#loading .ld-tip{font-size:13px;color:#fff;text-shadow:0 1px 3px #000,0 0 8px #000}
+@media (max-height:520px){#loading .ld-foot{bottom:4%;gap:6px}}
 </style>
 </head>
 <body>
+<div id="loading"><div class="ld-foot"><div class="ld-title">骑兵幸存者</div><div class="ld-bar"><i id="ld-fill"></i></div><div class="ld-tip" id="ld-tip">正在穿越到高加米拉……</div></div></div>
 <canvas id="c"></canvas>
 <div id="main-menu" hidden>
   <div class="mm-profile">
@@ -79,7 +88,12 @@ const P = {
   guards: 4,         // 亲卫数量
   cavStart: 60,      // 敌骑出现时间（秒）
   spawnMul: 1,       // 刷怪倍率
-  zoom: 1,           // 镜头缩放倍率
+  zoom: 0.85,        // 镜头缩放倍率（稍微拉远，屏幕上的移动显得慢一些）
+  camLook: 0.12,     // 镜头前瞻：往奔跑方向偏移 = 速度 × 此值（秒）
+  camSmooth: 2.5,    // 镜头跟随柔和度：越小越柔
+  camDead: 60,       // 镜头死区半径：马在这个范围里动时镜头不动
+  grid: false,       // 地面网格线和细碎小点
+  vignette: true,    // 高速时屏幕四周变暗
   god: false,        // 无敌
   bossTime: 180,     // 最终 Boss 出现时间（秒）
   art: new URLSearchParams(location.search).get('art') || 'retro', // 美术风格：blocks / cartoon / retro / fine
@@ -103,6 +117,9 @@ const SLIDERS = [
   ['spawnMul', '刷怪倍率', 0, 4, 0.1],
   ['bossTime', 'Boss 出现时间(秒)', 10, 600, 10],
   ['zoom', '镜头缩放', 0.5, 2, 0.05],
+  ['camLook', '镜头前瞻', 0, 0.4, 0.01],
+  ['camSmooth', '镜头跟随柔和度', 0.5, 10, 0.1],
+  ['camDead', '镜头死区', 0, 200, 5],
   ['squash', '2.5D 压扁比例', 0.4, 1, 0.02],
   ['slopeK', '坡度影响', 0, 2000, 50],
   ['mudMul', '泥地速度倍率', 0.2, 1, 0.05],
@@ -602,24 +619,26 @@ function drawGround(zx, zy) {
     ctx.fillStyle = `rgba(255,215,80,${a})`;
     ctx.fillRect(B.cx + B.offL - PHA_SP / 2, Math.min(B.cy, B.cy - B.side * 24) - 30, B.gap + PHA_SP, 84);
   }
+  if (P.grid) {
   ctx.strokeStyle = 'rgba(0,0,0,.07)'; ctx.lineWidth = 2; ctx.beginPath();
   const G = 160;
   for (let x = Math.max(0, Math.floor(x0 / G) * G); x <= Math.min(WORLD, x0 + vw); x += G) { ctx.moveTo(x, Math.max(0, y0)); ctx.lineTo(x, Math.min(WORLD, y0 + vh)); }
   for (let y = Math.max(0, Math.floor(y0 / G) * G); y <= Math.min(WORLD, y0 + vh); y += G) { ctx.moveTo(Math.max(0, x0), y); ctx.lineTo(Math.min(WORLD, x0 + vw), y); }
   ctx.stroke();
-  const C = 70;
+  }
+  const C = 70, dk = P.grid ? 1 : 0.4;   // 关掉细节时只留四成小草丛和石子
   ctx.lineWidth = 2;
   for (let i = Math.floor(x0 / C); i <= Math.floor((x0 + vw) / C); i++)
     for (let j = Math.floor(y0 / C); j <= Math.floor((y0 + vh) / C); j++) {
       if (i < 0 || j < 0 || i * C >= WORLD || j * C >= WORLD) continue;
       const hv = hash(i + 99, j + 31), px = i * C + hash(i, j + 3) * C, py = j * C + hash(i + 5, j) * C;
-      if (hv < 0.3) {
+      if (hv < 0.3 * dk) {
         ctx.strokeStyle = '#4f6e30'; ctx.beginPath();
         ctx.moveTo(px - 4, py); ctx.lineTo(px - 6, py - 7); ctx.moveTo(px, py); ctx.lineTo(px, py - 9); ctx.moveTo(px + 4, py); ctx.lineTo(px + 6, py - 7);
         ctx.stroke();
-      } else if (hv < 0.36) {
+      } else if (hv < 0.36 * dk) {
         ctx.fillStyle = '#8c8a7a'; ctx.beginPath(); ctx.ellipse(px, py, 5, 3.5, 0, 0, TAU); ctx.fill();
-      } else if (hv < 0.39) {
+      } else if (hv < 0.39 * dk) {
         ctx.fillStyle = '#d9c96a'; ctx.beginPath(); ctx.arc(px, py, 2.5, 0, TAU); ctx.fill();
       }
     }
@@ -948,11 +967,19 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (!S.dead && !S.won) { S.t += dt; updBoss(dt); updRiders(dt); updEnemies(dt); updSlash(dt); }
   const h = S.h, z = baseZoom();
-  const look = 0.35 * h.v;
-  const tx = h.x + Math.cos(h.a) * look, ty = h.y + Math.sin(h.a) * look;
-  const k = 1 - Math.exp(-5 * dt);
+  // 镜头：前瞻慢慢偏过去 + 死区 + 柔和跟随（减少晕眩）
+  if (!S.look) S.look = { x: 0, y: 0 };
+  const kl = 1 - Math.exp(-1.5 * dt);
+  S.look.x += (Math.cos(h.a) * h.v * P.camLook - S.look.x) * kl;
+  S.look.y += (Math.sin(h.a) * h.v * P.camLook - S.look.y) * kl;
   if (S.demo) { S.cam.x = WORLD / 2; S.cam.y = WORLD / 2; }   // 主界面：镜头固定
-  else { S.cam.x += (tx - S.cam.x) * k; S.cam.y += (ty - S.cam.y) * k; }
+  else {
+    const ox = h.x + S.look.x - S.cam.x, oy = h.y + S.look.y - S.cam.y, od = Math.hypot(ox, oy);
+    if (od > P.camDead) {
+      const mv = (od - P.camDead) * (1 - Math.exp(-P.camSmooth * dt));
+      S.cam.x += ox / od * mv; S.cam.y += oy / od * mv;
+    }
+  }
 
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   const fdt = S.dead || S.won ? 0 : dt;
@@ -973,6 +1000,14 @@ function frame(now) {
     drawRider(h, ST_LEADER, ratio(h) >= P.charge); drawSlash(h, SLASH_R);
     drawNums(fdt, false);
     ctx.restore();
+  }
+  // 速度暗角：高速时屏幕四周变暗，减少余光里的画面流动
+  const vr = S.demo ? 0 : ratio(h);
+  S.vig = (S.vig || 0) + ((P.vignette ? clamp((vr - 0.5) * 0.7, 0, 0.38) : 0) - (S.vig || 0)) * (1 - Math.exp(-3 * dt));
+  if (S.vig > 0.01) {
+    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.hypot(W, H) * 0.6);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${S.vig * 2})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
   if (!S.demo) drawHUD();
   requestAnimationFrame(frame);
@@ -1002,6 +1037,24 @@ document.getElementById('mm-name').addEventListener('input', ev => { try { local
 })();
 if (MENU) openMenu();
 
+// ===== 加载界面：等精灵图都加载完再淡出 =====
+(function loading() {
+  const el = document.getElementById('loading'), fill = document.getElementById('ld-fill'), tip = document.getElementById('ld-tip');
+  const bg = new Image();
+  bg.onload = () => { el.style.backgroundImage = `url(${bg.src})`; };
+  bg.src = Math.min(innerWidth, innerHeight) * (window.devicePixelRatio || 1) > 900 ? 'assets/loading.jpg' : 'assets/loading_s.jpg';
+  const all = Object.values(ARTS).flatMap(a => [...a.hero, a.guard, a.inf, a.shield, a.cav]);
+  const t0 = performance.now();
+  (function tick() {
+    const done = all.filter(im => im.complete).length, p = done / all.length;
+    fill.style.width = Math.round(p * 100) + '%';
+    if (p >= 1 && performance.now() - t0 > 1500) {
+      tip.textContent = '穿越完成！';
+      setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 700); }, 300);
+    } else requestAnimationFrame(tick);
+  })();
+})();
+
 // ===== 调试面板 =====
 if (DEBUG) {
   const box = document.getElementById('dbg'), bd = document.getElementById('dbgBd');
@@ -1023,6 +1076,12 @@ if (DEBUG) {
   v.innerHTML = '<input type="checkbox" checked> 2.5D 视角（关掉 = 正俯视）';
   v.querySelector('input').addEventListener('change', ev => { P.view25 = ev.target.checked; });
   bd.appendChild(v);
+  for (const [key, name] of [['grid', '地面网格和细碎小点'], ['vignette', '高速暗角']]) {
+    const l = document.createElement('label');
+    l.innerHTML = `<input type="checkbox"${P[key] ? ' checked' : ''}> ${name}`;
+    l.querySelector('input').addEventListener('change', ev => { P[key] = ev.target.checked; });
+    bd.appendChild(l);
+  }
   const tr = document.createElement('label');
   tr.innerHTML = '<input type="checkbox" checked> 地形（坡地/泥地）';
   tr.querySelector('input').addEventListener('change', ev => { P.terrain = ev.target.checked; });
