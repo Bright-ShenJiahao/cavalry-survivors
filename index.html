@@ -144,23 +144,23 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // ===== 地形（无限地图）：按区域用确定的随机数生成坡地和泥地 =====
 function hsh(i, j, k) { let n = (i * 73856093) ^ (j * 19349663) ^ ((k || 0) * 83492791); n = (n ^ (n >>> 13)) * 1274126177; return ((n ^ (n >>> 16)) >>> 0) / 4294967296; }
 const SPAWN = { x: 2000, y: 2000 };
-const HILL_CELL = 1300, MUD_CELL = 650;
-const FIXED_HILLS = [{ x: 2000, y: 1200, r: 420, h: 170 }, { x: 2700, y: 1900, r: 260, h: 100 }, { x: 1250, y: 2150, r: 300, h: 120 }];
+const HILL_CELL = 2800, MUD_CELL = 650;   // 高地：少而大；泥地：很少
+const FIXED_HILLS = [{ x: 2000, y: 1050, r: 620, h: 260 }];   // 出生点北边一座大高地，方便试下坡冲锋
 const hillCache = new Map(), mudCache = new Map();
 function hillsIn(i, j) {   // 每个大格子里最多一座坡
   const k = i + ',' + j; let v = hillCache.get(k); if (v) return v;
   v = [];
   const cx = i * HILL_CELL + HILL_CELL / 2, cy = j * HILL_CELL + HILL_CELL / 2;
-  if (Math.hypot(cx - SPAWN.x, cy - SPAWN.y) < 1100) { for (const h of FIXED_HILLS) if (Math.floor(h.x / HILL_CELL) === i && Math.floor(h.y / HILL_CELL) === j) v.push(h); }
-  else if (hsh(i, j, 1) < 0.45) v.push({ x: cx + (hsh(i, j, 2) - .5) * HILL_CELL * 0.6, y: cy + (hsh(i, j, 3) - .5) * HILL_CELL * 0.6, r: 220 + hsh(i, j, 4) * 320, h: 60 + hsh(i, j, 5) * 140 });
+  if (Math.hypot(cx - SPAWN.x, cy - SPAWN.y) < 2000) { for (const h of FIXED_HILLS) if (Math.floor(h.x / HILL_CELL) === i && Math.floor(h.y / HILL_CELL) === j) v.push(h); }
+  else if (hsh(i, j, 1) < 0.35) v.push({ x: cx + (hsh(i, j, 2) - .5) * HILL_CELL * 0.5, y: cy + (hsh(i, j, 3) - .5) * HILL_CELL * 0.5, r: 480 + hsh(i, j, 4) * 300, h: 180 + hsh(i, j, 5) * 120 });
   hillCache.set(k, v); return v;
 }
 function mudsIn(i, j) {    // 每个小格子里可能有一片泥地（几团圆拼成）
   const k = i + ',' + j; let v = mudCache.get(k); if (v) return v;
   v = [];
   const cx = i * MUD_CELL + MUD_CELL / 2, cy = j * MUD_CELL + MUD_CELL / 2;
-  const fixed = (i === 3 && j === 3) || (i === 3 && j === 4);
-  if (fixed || (Math.hypot(cx - SPAWN.x, cy - SPAWN.y) > 500 && hsh(i, j, 7) < 0.16)) {
+  const fixed = i === 3 && j === 4;
+  if (fixed || (Math.hypot(cx - SPAWN.x, cy - SPAWN.y) > 900 && hsh(i, j, 7) < 0.04)) {
     const mx = cx + (hsh(i, j, 8) - .5) * MUD_CELL * 0.5, my = cy + (hsh(i, j, 9) - .5) * MUD_CELL * 0.5, mr = 70 + hsh(i, j, 10) * 110;
     const n = 3 + Math.floor(hsh(i, j, 11) * 4);
     for (let q = 0; q < n; q++) { const a = hsh(i, j, 20 + q) * TAU, d = hsh(i, j, 40 + q) * mr * 0.7; v.push({ x: mx + Math.cos(a) * d, y: my + Math.sin(a) * d * 0.8, r: mr * (0.45 + hsh(i, j, 60 + q) * 0.45) }); }
@@ -273,7 +273,7 @@ function steer(o, dx, dy, m, dt, q) {
   // 坡度：沿前进方向的坡度，下坡加速、上坡最高速度下降
   const g = gradAt(o.x, o.y), sl = g[0] * Math.cos(o.a) + g[1] * Math.sin(o.a);
   o.slope = sl; o.mud = mud;
-  const mx = q.max * (mud ? P.mudMul : 1) * (sl > 0.02 ? 1 - Math.min(0.55, sl * P.slopeK / 500) : 1);
+  const mx = q.max * (mud ? P.mudMul : 1) * (sl > 0.02 ? 1 - Math.min(0.35, sl * P.slopeK / 500) : 1);
   const om = q.turn * (1 - q.fx * Math.min(1, o.v / q.max));
   let brk = false;
   if (m > 0.1) {
