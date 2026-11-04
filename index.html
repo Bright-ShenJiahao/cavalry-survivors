@@ -729,7 +729,7 @@ function updEnemies(dt) {
 }
 
 // ===== 自动挥砍 =====
-const SLASH_R = 75, GSLASH_R = 55;
+const SLASH_R = 75, GSLASH_R = 45;
 function slash(rd, R, base, dt) {
   if (rd.slashAnim > 0) rd.slashAnim -= dt;
   if (rd.flash > 0) rd.flash -= dt;
@@ -746,7 +746,7 @@ function slash(rd, R, base, dt) {
 }
 function updSlash(dt) {
   if (S.h.flash > 0) S.h.flash -= dt;   // 主角不再 360° 挥砍，改成骑枪前刺（src/run.js）
-  for (const g of S.g) slash(g, GSLASH_R, P.slashBase * 0.6 * runElite(), dt);
+  for (const g of S.g) guardAtk(g, dt);   // 跑起来前刺，停下来小范围环形砍
 }
 
 // ===== 绘制 =====

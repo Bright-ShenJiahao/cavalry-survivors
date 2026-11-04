@@ -5,7 +5,7 @@
 const RUN_MAX = { g: 1, w: 3, s: 3, b: 5 };
 const CARD = {
   // ---- 专属（金框，不占格子）----
-  lance: { t: 'g', nm: '骑枪', ic: '矛', d: ['刺正前方 100° 内的敌人，伤害靠马速', '伤害 +30%', '枪更长：射程 +25%', '出枪更快', '满级「贯阵」：冲锋速度下一枪贯穿前方一条线'] },
+  lance: { t: 'g', nm: '骑枪', ic: '矛', d: ['刺正前方 100° 内的敌人，伤害靠马速', '伤害 +30%', '枪更长：攻击范围 +25%', '出枪更快', '满级「贯阵」：冲锋速度下一枪贯穿前方一条线'] },
   // ---- 兵器（蓝框）----
   sabre: { t: 'w', nm: '马刀', ic: '刀', d: ['冲过人群时顺手劈两侧（速度 40% 以上才出刀）', '伤害 +30%', '刀光更长', '砍得更快', '满级「劈斩」：冲锋速度下砍飞敌人，飞出去的人会撞倒后面的人'] },
   bow: { t: 'w', nm: '骑弓', ic: '弓', d: ['自动射最近的敌人', '伤害 +30%', '多 1 支箭', '射得更快', '满级：回马箭，向后多射 2 支，可穿透'] },
@@ -179,6 +179,31 @@ const WEAP = {
     for (let i = 0; i < n; i++) shoot(L.x, L.y, L.a + (n > 1 ? (i - 0.5) * 0.16 : 0), 520 + L.v, 0.75, dmg, lv >= 5 ? 999 : 3, 8, 'jav', lv >= 5);
   },
 };
+// ---- 亲卫：跑起来用骑枪往前刺，停下来拔刀小范围环形砍 ----
+function guardAtk(g, dt) {
+  if (g.slashAnim > 0) g.slashAnim -= dt;
+  if (g.flash > 0) g.flash -= dt;
+  g.slashT -= dt; if (g.slashT > 0) return;
+  const el = runElite(), c = Math.cos(g.a), s = Math.sin(g.a);
+  if (ratio(g) >= 0.3) {
+    const reach = 100, half = 50 * Math.PI / 180, dmg = 10 * mult(g) * el;
+    let any = false;
+    for (const e of S.en) {
+      if (e.dead) continue;
+      const dx = e.x - g.x, dy = e.y - g.y, d = Math.hypot(dx, dy);
+      if (d < reach + e.r && Math.abs(wrap(Math.atan2(dy, dx) - g.a)) < half + Math.atan2(e.r, d || 1)) { any = true; hit(e, dmg, c, s, 240); }
+    }
+    if (any) { g.slashT = 0.7; S.run.fx.push({ k: 'thrust', x: g.x, y: g.y, a: g.a, len: reach, t: 0, d: 0.12 }); }
+  } else {
+    let any = false;
+    for (const e of S.en) {
+      if (e.dead) continue;
+      const dx = e.x - g.x, dy = e.y - g.y, d = Math.hypot(dx, dy);
+      if (d < 45 + e.r) { any = true; hit(e, 5 * el, dx / (d || 1), dy / (d || 1), 160); }
+    }
+    if (any) { g.slashT = 0.6; g.slashAnim = 0.18; }
+  }
+}
 // ---- 骑枪（专属）：只刺正前方 100°，伤害靠马速 ----
 function lanceUpd(lv, dt) {
   const L = S.h, R = S.run, reach = 110 * (lv >= 3 ? 1.25 : 1), half = 50 * Math.PI / 180;
