@@ -43,6 +43,7 @@ const P = {
   zoom: 1,           // 镜头缩放倍率
   god: false,        // 无敌
   bossTime: 180,     // 最终 Boss 出现时间（秒）
+  art: new URLSearchParams(location.search).get('art') || 'fine', // 美术风格：blocks / cartoon / retro / fine
   terrain: true,     // 地形开关
   slopeK: 900,       // 坡度影响（下坡加速/上坡减速）
   mudMul: 0.5,       // 泥地速度倍率
@@ -760,12 +761,66 @@ function drawSlash3(o, R) {
   ctx.beginPath(); ctx.arc(0, 0, R, st - 1.5, st); ctx.stroke();
   ctx.restore();
 }
+// ===== 美术风格（AI 样图切出的精灵） =====
+const ART_NAMES = { blocks: '色块', cartoon: '3D 卡通', retro: '复古像素', fine: '精细像素' };
+const ARTS = {};
+for (const st of ['cartoon', 'retro', 'fine']) {
+  const ld = n => { const im = new Image(); im.src = `assets/style/${st}/${n}.png`; return im; };
+  ARTS[st] = { hero: [0, 1, 2, 3, 4, 5].map(i => ld('hero' + i)), guard: ld('guard'), inf: ld('inf'), shield: ld('shield'), cav: ld('cav') };
+}
+const ready = im => im && im.complete && im.naturalWidth > 0;
+function faceOf(o, dx) {   // 左右朝向，带一点迟滞避免竖直移动时来回翻
+  if (dx > 0.15) o.face = 1; else if (dx < -0.15) o.face = -1;
+  return o.face || 1;
+}
+// 以脚底为锚点画一张精灵；h 是世界坐标里的高度
+function spr3(o, im, h, flip, bob) {
+  if (!ready(im)) return false;
+  const w = im.naturalWidth * h / im.naturalHeight, p = P3(o.x, o.y, (o.z || 0) + (bob || 0));
+  ctx.save(); ctx.translate(p[0], p[1]);
+  if (o.dead) { ctx.translate(0, -h / 2); ctx.rotate(o.rot); ctx.translate(0, h / 2); ctx.globalAlpha = clamp(o.fly * 3, 0, 1); }
+  if (o.flash > 0) ctx.globalAlpha *= 0.45;
+  if (flip < 0) ctx.scale(-1, 1);
+  ctx.drawImage(im, -w / 2, -h, w, h);
+  ctx.restore();
+  return true;
+}
+function chargeAura3(o) {
+  const c = Math.cos(o.a), n = Math.sin(o.a), q = (f, sd) => P3(o.x + c * f - n * sd, o.y + n * f + c * sd, 0);
+  const a = q(46, 0), b = q(18, -20), d = q(18, 20);
+  ctx.fillStyle = `rgba(255,140,40,${0.25 + 0.2 * Math.sin(S.t * 30)})`;
+  ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(d[0], d[1]); ctx.closePath(); ctx.fill();
+}
+function riderSpr3(o, im, h) {
+  shadow3(o.x, o.y, 26, 10, 0);
+  if (!o.dead && ratio(o) >= P.charge) chargeAura3(o);
+  const bob = Math.abs(Math.sin(S.t * (8 + 10 * ratio(o)) + (o.phase || 0))) * 3 * Math.min(1, o.v / 60);
+  return spr3(o, im, h, o.dead ? (o.face || 1) : faceOf(o, Math.cos(o.a)), bob);
+}
+
 function draw3(dt) {
   drawDust(dt, true);
   for (const g of S.g) drawSlash3(g, GSLASH_R);
   drawSlash3(S.h, SLASH_R);
   const list = [...S.en, ...S.g, S.h].sort((a, b) => a.y - b.y);
+  const A = ARTS[P.art], L0 = S.h;
+  L0.anim = (L0.anim || 0) + dt * (L0.v < 15 ? 0 : 5 + 9 * ratio(L0));
   for (const o of list) {
+    if (A) {
+      let done = false;
+      if (o === S.h) done = riderSpr3(o, A.hero[o.v < 15 ? 0 : Math.floor(o.anim) % 6], 50);
+      else if (!o.type) { done = riderSpr3(o, A.guard, 50); if (done && o.hp < o.max) bar3(o, 26, 56, '#4c4'); }
+      else if (o.type === 'cav') { done = riderSpr3(o, A.cav, 52); if (done && !o.dead && o.hp < o.max) bar3(o, 26, 58, '#e44'); }
+      else if (o.type === 'grunt' || o.type === 'pha' || o.type === 'brute') {
+        const im = o.type === 'grunt' ? A.inf : A.shield, h = o.type === 'grunt' ? 32 : o.type === 'pha' ? 38 : 56;
+        const sh = 1 / (1 + (o.z || 0) / 80);
+        shadow3(o.x, o.y, o.r * sh, o.r * 0.6 * sh, 0);
+        const fl = faceOf(o, (L0.x - o.x) / 40);
+        done = spr3(o, im, h, o.dead ? (o.face || 1) : fl, o.dead ? 0 : Math.abs(Math.sin(S.t * 9 + o.x)) * 1.5);
+        if (done && o.type === 'brute' && !o.dead) bar3(o, 40, 62, '#e44');
+      }
+      if (done) continue;
+    }
     if (o === S.h) drawRider3(o, ST_LEADER, ratio(o) >= P.charge);
     else if (!o.type) { drawRider3(o, ST_GUARD, ratio(o) >= P.charge); if (o.hp < o.max) bar3(o, 26, 52, '#4c4'); }
     else if (RIDE_ST[o.type]) {
@@ -887,6 +942,10 @@ if (DEBUG) {
     });
     bd.appendChild(l);
   }
+  const as = document.createElement('label');
+  as.innerHTML = '美术风格 <select>' + Object.entries(ART_NAMES).map(([k, n]) => `<option value="${k}"${k === P.art ? ' selected' : ''}>${n}</option>`).join('') + '</select>';
+  as.querySelector('select').addEventListener('change', ev => { P.art = ev.target.value; });
+  bd.appendChild(as);
   const v = document.createElement('label');
   v.innerHTML = '<input type="checkbox" checked> 2.5D 视角（关掉 = 正俯视）';
   v.querySelector('input').addEventListener('change', ev => { P.view25 = ev.target.checked; });
