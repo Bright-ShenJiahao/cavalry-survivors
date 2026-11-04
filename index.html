@@ -193,8 +193,8 @@ function gradAt(x, y) {
 const PROP_CELL = 600, POND_CELL = 1800, propCache = new Map(), pondCache = new Map();
 // 碰撞圈 [dx,dy,r]；brk=可撞碎（loss=撞碎后掉速比例）；tall=挡视线时半透明
 const PDEF = {
-  fence: { cs: [[-45, 0, 18], [0, 0, 18], [45, 0, 18]], brk: .10, col: '#7a5530' },
-  fenceC: { cs: [[-40, 0, 18], [0, 0, 18], [30, -25, 18]], brk: .10, col: '#7a5530' },
+  fence: { cs: [[-22, 0, 10], [0, 0, 10], [22, 0, 10]], brk: .10, col: '#7a5530' },
+  fenceC: { cs: [[-20, 0, 10], [0, 0, 10], [15, -12, 10]], brk: .10, col: '#7a5530' },
   tentW: { cs: [[0, -10, 55]], brk: .25, tall: 1, col: '#d8c8a0' },
   tentR: { cs: [[0, -10, 68]], brk: .25, tall: 1, col: '#b84a36' },
   flag: { cs: [[0, 0, 12]], brk: .10, col: '#c03028' },
@@ -204,7 +204,7 @@ const PDEF = {
   bushS: {}, bushM: {}, wreck: {},
 };
 const FLAT = new Set(['tuft1', 'tuft2', 'tuft3', 'tuft4', 'rubble', 'flat', 'dec1', 'dec2', 'dec3', 'pond1', 'pond2']);
-const PSCALE = { wreck: 0.5, dec1: 0.55, dec2: 0.5, dec3: 0.52 };   // 残骸/贴花缩到和人物差不多大
+const PSCALE = { fence: 0.5, fenceC: 0.5, wreck: 0.5, dec1: 0.55, dec2: 0.5, dec3: 0.52 };   // 残骸/贴花缩到和人物差不多大
 const mkProp = (id, k, x, y) => ({ prop: 1, id, k, x, y, flat: FLAT.has(k), d: PDEF[k] || {} });
 const nearSpawn = (x, y, r) => Math.hypot(x - SPAWN.x, y - SPAWN.y) < r;
 // 出生点小营地（暂时停用，gatherProps 里不收集）
@@ -222,8 +222,8 @@ function propsIn(i, j) {
   if (R(1) < 0.22) add(R(2) < 0.6 ? 'bushS' : 'bushM', x0 + R(3) * PROP_CELL, y0 + R(4) * PROP_CELL, 'b');
   if (R(5) < 0.10) { const t = Math.floor(R(6) * 4); add(['wreck', 'dec1', 'dec2', 'dec3'][t], x0 + 100 + R(7) * 400, y0 + 100 + R(8) * 400, 'w'); }
   if (R(9) < 0.06) {   // 野外木栅栏：一小段
-    const n = 1 + Math.floor(R(40) * 3), fx = x0 + 80 + R(41) * 260, fy = y0 + 100 + R(42) * 400;
-    for (let q = 0; q < n; q++) add(q === n - 1 && R(43) < 0.4 ? 'fenceC' : 'fence', fx + q * 92, fy, 'f' + q);
+    const n = 2 + Math.floor(R(40) * 3), fx = x0 + 80 + R(41) * 260, fy = y0 + 100 + R(42) * 400;
+    for (let q = 0; q < n; q++) add(q === n - 1 && R(43) < 0.4 ? 'fenceC' : 'fence', fx + q * 46, fy, 'f' + q);
   }
   propCache.set(key, v); return v;
 }
