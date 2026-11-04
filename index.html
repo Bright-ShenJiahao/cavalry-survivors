@@ -67,6 +67,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:n
   </div>
 </div>
 <div id="dbg"><div class="hd" id="dbgHd"><span>调试面板</span><span id="dbgArrow">▲</span></div><div class="bd" id="dbgBd"></div></div>
+<script src="assets/horse8/meta.js"></script>
 <script>
 'use strict';
 const FORCE_DEBUG = false;
@@ -94,6 +95,7 @@ const P = {
   camDead: 60,       // 镜头死区半径：马在这个范围里动时镜头不动
   grid: false,       // 地面网格线和细碎小点
   vignette: true,    // 高速时屏幕四周变暗
+  horse8: true,      // 8 方向马（骑手先用简单图形代替）
   god: false,        // 无敌
   bossTime: 180,     // 最终 Boss 出现时间（秒）
   art: new URLSearchParams(location.search).get('art') || 'retro', // 美术风格：blocks / cartoon / retro / fine
@@ -836,7 +838,7 @@ for (const st of ['cartoon', 'retro', 'fine']) {
   const ld = n => { const im = new Image(); im.src = `assets/style/${st}/${n}.png`; return im; };
   ARTS[st] = { hero: [0, 1, 2, 3, 4, 5].map(i => ld('hero' + i)), guard: ld('guard'), inf: ld('inf'), shield: ld('shield'), cav: ld('cav') };
 }
-const ready = im => im && im.complete && im.naturalWidth > 0;
+const ready = im => im && (im instanceof HTMLCanvasElement ? im.width > 0 : im.complete && im.naturalWidth > 0);
 function faceOf(o, dx) {   // 左右朝向，带一点迟滞避免竖直移动时来回翻
   if (dx > 0.15) o.face = 1; else if (dx < -0.15) o.face = -1;
   return o.face || 1;
@@ -866,19 +868,84 @@ function riderSpr3(o, im, h) {
   return spr3(o, im, h, o.dead ? (o.face || 1) : faceOf(o, Math.cos(o.a)), bob);
 }
 
+// ===== 8 方向马：画 5 个方向，左侧三个方向水平翻转 =====
+const H8 = { dirs: window.HORSE8 ? HORSE8.dirs : [], img: {}, tint: {} };
+for (const d of H8.dirs) for (let i = 0; i < 8; i++) { const im = new Image(); im.src = `assets/horse8/${d}${i}.png`; H8.img[d + i] = im; }
+const HS = 0.42;   // 马图 1 像素 = 0.42 世界单位
+// 换毛色：浅灰白的马身按目标颜色重新上色，深色鬃毛压暗；跨域读不了像素时就用原图
+function horseImg(key, tint) {
+  const im = H8.img[key];
+  if (!tint || !ready(im)) return im;
+  const id = key + tint.join(',');
+  if (H8.tint[id] !== undefined) return H8.tint[id] || im;
+  try {
+    const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
+    const x = c.getContext('2d'); x.drawImage(im, 0, 0);
+    const d = x.getImageData(0, 0, c.width, c.height), p = d.data;
+    for (let i = 0; i < p.length; i += 4) {
+      const r = p[i], g = p[i + 1], b = p[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      if (mx - mn > 28) continue;               // 有颜色的部分（马鞍、缰绳）不动
+      if (mx > 115) { const k = mx / 235; p[i] = tint[0] * k; p[i + 1] = tint[1] * k; p[i + 2] = tint[2] * k; }
+      else if (mx > 40) { p[i] *= 0.55; p[i + 1] *= 0.5; p[i + 2] *= 0.5; }
+    }
+    x.putImageData(d, 0, 0); H8.tint[id] = c;
+  } catch (e) { H8.tint[id] = null; }
+  return H8.tint[id] || im;
+}
+const H8_SECT = [['E', 1], ['SE', 1], ['S', 1], ['SE', -1], ['E', -1], ['NE', -1], ['N', 1], ['NE', 1]];
+// 画一匹 8 方向马 + 简单骑手。rd: {body, ring, lance}
+function riderH8(o, tint, rd) {
+  if (!window.HORSE8) return false;
+  const sx = Math.cos(o.a), sy = Math.sin(o.a) * SQ;
+  const sec = ((Math.round(Math.atan2(sy, sx) / (Math.PI / 4)) % 8) + 8) % 8;
+  const [dn, flip] = H8_SECT[sec], di = H8.dirs.indexOf(dn);
+  o.anim = (o.anim || 0) + 0;   // 由外部推进
+  const fi = o.v < 15 ? Math.floor(S.t * 1.6) % 2 : 2 + Math.floor(o.anim || 0) % 6;
+  const im = horseImg(dn + fi, tint), F = HORSEMETA(di, fi);
+  if (!ready(im) || !F) return false;
+  shadow3(o.x, o.y, sec % 4 === 2 ? 12 : 24, 9, 0);
+  if (!o.dead && ratio(o) >= P.charge) chargeAura3(o);
+  const p = P3(o.x, o.y, o.z || 0), w = F.w * HS, h = F.h * HS, up = F.up * HS;
+  const seatX = p[0] + F.sx * HS * flip, seatY = p[1] - up + F.sy * HS;
+  const rider = () => {
+    // 简单骑手：躯干 + 头 + 长枪（指向奔跑方向）
+    ctx.lineCap = 'round';
+    seg([seatX, seatY], [seatX, seatY - 13], 9, '#1a1410'); seg([seatX, seatY], [seatX, seatY - 13], 6.5, rd.body);
+    ctx.fillStyle = rd.head || '#e8c49a'; ctx.strokeStyle = '#1a1410'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(seatX, seatY - 18, 4.2, 0, TAU); ctx.fill(); ctx.stroke();
+    if (rd.ring) { ctx.fillStyle = rd.ring; ctx.beginPath(); ctx.arc(seatX, seatY - 20, 3.2, Math.PI, 0); ctx.fill(); }
+    const L = 24, lx = sx / Math.hypot(sx, sy), ly = sy / Math.hypot(sx, sy);
+    seg([seatX - lx * 8, seatY - 8 - ly * 8], [seatX + lx * L, seatY - 8 + ly * L], 2.2, rd.lance || '#c8c8c8');
+    ctx.lineCap = 'butt';
+  };
+  ctx.save();
+  if (o.dead) ctx.globalAlpha = clamp(o.fly * 3, 0, 1);
+  if (o.flash > 0) ctx.globalAlpha *= 0.45;
+  if (dn === 'S') rider();                       // 正面朝镜头：人在马头后面
+  ctx.save(); ctx.translate(p[0], p[1] - up); if (flip < 0) ctx.scale(-1, 1);
+  ctx.drawImage(im, -w / 2, -h, w, h); ctx.restore();
+  if (dn !== 'S') rider();
+  ctx.restore();
+  return true;
+}
+function HORSEMETA(di, fi) { return window.HORSE8 && HORSE8.frames[di] && HORSE8.frames[di][fi]; }
+const RD_HERO = { body: '#f2f2f2', ring: '#222', lance: '#d0d0d0', head: '#e8c49a' };
+const RD_GUARD = { body: '#3a5fc8', ring: '#b8bcc4' };
+const RD_CAV = { body: '#b8322a', ring: '#c0a040' };
+
 function draw3(dt) {
   drawDust(dt, true);
   for (const g of S.g) drawSlash3(g, GSLASH_R);
   drawSlash3(S.h, SLASH_R);
   const list = [...S.en, ...S.g, S.h].sort((a, b) => a.y - b.y);
   const A = ARTS[P.art], L0 = S.h;
-  L0.anim = (L0.anim || 0) + dt * (L0.v < 15 ? 0 : 5 + 9 * ratio(L0));
+  for (const o of [L0, ...S.g, ...S.en]) if (o.v !== undefined) o.anim = (o.anim || 0) + dt * (o.v < 15 ? 0 : 6 + 10 * Math.min(1, o.v / P.maxSpeed));
   for (const o of list) {
     if (A) {
       let done = false;
-      if (o === S.h) done = riderSpr3(o, A.hero[o.v < 15 ? 0 : Math.floor(o.anim) % 6], 50);
-      else if (!o.type) { done = riderSpr3(o, A.guard, 50); if (done && o.hp < o.max) bar3(o, 26, 56, '#4c4'); }
-      else if (o.type === 'cav') { done = riderSpr3(o, A.cav, 52); if (done && !o.dead && o.hp < o.max) bar3(o, 26, 58, '#e44'); }
+      if (o === S.h) done = (P.horse8 && riderH8(o, null, RD_HERO)) || riderSpr3(o, A.hero[o.v < 15 ? 0 : Math.floor(o.anim) % 6], 50);
+      else if (!o.type) { done = (P.horse8 && riderH8(o, [150, 96, 58], RD_GUARD)) || riderSpr3(o, A.guard, 50); if (done && o.hp < o.max) bar3(o, 26, 56, '#4c4'); }
+      else if (o.type === 'cav') { done = (P.horse8 && riderH8(o, [92, 58, 38], RD_CAV)) || riderSpr3(o, A.cav, 52); if (done && !o.dead && o.hp < o.max) bar3(o, 26, 58, '#e44'); }
       else if (o.type === 'grunt' || o.type === 'pha' || o.type === 'brute') {
         const im = o.type === 'grunt' ? A.inf : A.shield, h = o.type === 'grunt' ? 32 : o.type === 'pha' ? 38 : 56;
         const sh = 1 / (1 + (o.z || 0) / 80);
@@ -1076,7 +1143,7 @@ if (DEBUG) {
   v.innerHTML = '<input type="checkbox" checked> 2.5D 视角（关掉 = 正俯视）';
   v.querySelector('input').addEventListener('change', ev => { P.view25 = ev.target.checked; });
   bd.appendChild(v);
-  for (const [key, name] of [['grid', '地面网格和细碎小点'], ['vignette', '高速暗角']]) {
+  for (const [key, name] of [['horse8', '8 方向马（测试）'], ['grid', '地面网格和细碎小点'], ['vignette', '高速暗角']]) {
     const l = document.createElement('label');
     l.innerHTML = `<input type="checkbox"${P[key] ? ' checked' : ''}> ${name}`;
     l.querySelector('input').addEventListener('change', ev => { P[key] = ev.target.checked; });
