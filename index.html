@@ -401,7 +401,7 @@ const ratio = o => Math.min(1.3, o.v / P.maxSpeed);
 const mult = o => (o === S.h && S.run && S.run.hm > 0) ? P.dmgMax : P.dmgMin + (P.dmgMax - P.dmgMin) * ratio(o);   // 回马：调头后按满速算
 // 马厩·调教：一根滑块，-1 = 极稳，0 = 中，+1 = 极烈（存在本机）。伤害按绝对速度算，所以烈马上限高、稳马好控
 let TEMPER = 0; try { TEMPER = clamp(+localStorage.getItem('cs_temper') || 0, -1, 1); } catch (e) {}
-const TMP = () => ({ spd: 1 + 0.12 * TEMPER, acc: 1 + 0.10 * TEMPER, turn: 1 - 0.20 * TEMPER, brake: 1 - 0.20 * TEMPER });
+const TMP = () => ({ spd: 1 + 0.25 * TEMPER, acc: 1 + 0.20 * TEMPER, turn: 1 - 0.35 * TEMPER, brake: 1 - 0.35 * TEMPER });
 const qLeader = () => { const t = TMP(); return { max: P.maxSpeed * runSpd() * t.spd, accel: P.accel * runAcc() * t.acc, brake: P.brake * t.brake, coast: P.coast, turn: P.turnRate * runTurn() * t.turn, fx: P.turnSpeedFx }; };
 const qGuard = () => { const t = TMP(); return { max: P.maxSpeed * 1.15 * runSpd() * t.spd, accel: P.accel * 1.3 * runAcc() * t.acc, brake: P.brake * t.brake, coast: P.coast, turn: P.turnRate * 1.15 * runTurn() * t.turn, fx: P.turnSpeedFx }; };
 const qCav = () => ({ max: P.maxSpeed * 0.85, accel: P.accel * 0.7, brake: P.brake * 0.6, coast: P.coast, turn: P.turnRate * 0.6, fx: P.turnSpeedFx });
