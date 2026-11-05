@@ -26,10 +26,10 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:n
 .mm-name input{box-sizing:border-box;width:100%;padding:11px 14px;border:1px solid #729bd07a;border-radius:6px;background:#0c172ac9;color:#fff;font:16px system-ui;outline:none;text-align:center}
 .mm-panel{box-sizing:border-box;width:360px;padding:22px;border:2px solid #b6d5ff;border-radius:12px;background:linear-gradient(145deg,#254f9cdd,#142858d9);box-shadow:0 0 0 3px #101c35aa,0 18px 60px #0005}
 .mm-panel button{cursor:pointer;font:inherit;color:inherit}
-.mm-start{display:block;width:100%;text-align:left;padding:16px 18px;margin-bottom:18px;border:1px solid #a2cbff88;border-radius:7px;background:#72a9f62b;font-size:23px!important;font-weight:700}
+.mm-start{display:block;width:100%;text-align:left;padding:16px 18px;margin:6px 0 4px;border:1px solid #a2cbff88;border-radius:7px;background:#72a9f62b;font-size:23px!important;font-weight:700}
 .mm-start:hover{background:#8bbcff40}
 .mm-start small{display:block;font-size:12px;font-weight:400;letter-spacing:.04em;color:#d4e4fc;margin-top:5px}
-.mm-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mm-lb{display:block;font-size:13px;color:#c9d8f0;margin-bottom:12px}.mm-lb input{display:block;box-sizing:border-box;width:100%;margin-top:5px;padding:11px 14px;border:1px solid #729bd07a;border-radius:6px;background:#0c172ac9;color:#fff;font:16px system-ui;outline:none}.mm-lb input.need{border-color:#ff7060;box-shadow:0 0 0 2px #ff706055}.mm-start.off{opacity:.55}
 .mm-grid button{font-size:14px;padding:12px 10px;border:1px solid #83abe354;border-radius:5px;background:#0c225a55;text-align:left;color:#ecf5ff}
 .mm-grid button:hover{background:#77a9f044;border-color:#c1e0ff}
 .mm-note{color:#c3d3ef;font-size:12px;line-height:1.7;margin-top:16px;border-top:1px solid #9ebfe432;padding-top:12px}
@@ -57,15 +57,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:n
     <div class="mm-sub">CAVALRY SURVIVORS</div>
     <div class="mm-tag">穿越历史骑兵战场，冲锋、割草，在战火中觉醒魔法。</div>
     <div class="mm-card"><canvas id="mm-hero" width="400" height="300"></canvas></div>
-    <label class="mm-name"><input id="mm-name" maxlength="12" placeholder="输入你的名字"></label>
   </div>
   <div class="mm-panel">
-    <button class="mm-start" id="mm-start">开始冲锋<small>第一章 · 高加米拉　公元前 331 年</small></button>
-    <div class="mm-grid">
-      <button>⚔ 备战</button><button id="mm-stable">🐎 马厩</button>
-      <button>🗺 战役地图</button><button>⬆ 永久强化</button>
-      <button>📖 图鉴</button><button>🏆 英雄榜</button>
-    </div>
+    <label class="mm-lb">名字<input id="mm-name" maxlength="12" placeholder="输入你的名字"></label>
+    <label class="mm-lb">口令<input id="mm-pin" maxlength="16" placeholder="自己记住的口令，用来认领英雄榜成绩" autocomplete="off"></label>
+    <button class="mm-start" id="mm-start">开始游戏<small>备战 · 马厩 · 强化，然后出发</small></button>
     <div class="mm-note">拖动屏幕任意位置控制方向，推得越远跑得越快；往身后推是刹车。速度越快，冲撞和挥砍伤害越高。</div>
   </div>
 </div>
@@ -1357,8 +1353,7 @@ const MENU = !new URLSearchParams(location.search).has('nomenu');
 const mm = document.getElementById('main-menu');
 // 主界面里骑兵走的那条线：屏幕下方，面板下面露出来的地方
 function demoY() { return WORLD / 2 + H * (H < 520 ? 0.44 : 0.37) / (baseZoom() * (P.view25 ? P.squash : 1)); }
-function openMenu() { reset(true); S.h.x = WORLD / 2 - W / baseZoom() * 0.3; S.h.y = demoY(); S.h.a = 0; S.h.v = P.maxSpeed * 0.3; setGuards(0); setGuards(P.guards); mm.hidden = false; }
-document.getElementById('mm-start').onclick = () => { mm.hidden = true; reset(false); };
+function openMenu() { demoScene(); mm.hidden = false; }
 // ===== 试马场：没有刷怪、不会死，几排草人可以撞，几根标杆绕着跑 =====
 const YARD_POSTS = [];
 for (let r = 0; r < 3; r++) for (let i = 0; i < 6; i++) YARD_POSTS.push([2350 + r * 40, 1860 + i * 45]);   // 正前方三排草人
@@ -1378,51 +1373,102 @@ function yardUpdate(dt) {   // 草人被打倒 2.5 秒后在原地立起来
     if (t > 2.5) { S.en.push(yardDummy(p)); S.yardT.delete(p); } else S.yardT.set(p, t);
   }
 }
-// ===== 马厩 =====
-(function stable() {
+// ===== 开始游戏之后：备战 / 马厩 / 强化 → 选择战场 → 出发；顶栏：军功、图鉴、英雄榜（参考异世界幸存者） =====
+function demoScene() { reset(true); S.h.x = WORLD / 2 - W / baseZoom() * 0.3; S.h.y = demoY(); S.h.a = 0; S.h.v = P.maxSpeed * 0.3; setGuards(0); setGuards(P.guards); }
+(function prep() {
   const st = document.createElement('style');
-  st.textContent = `#stable{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:flex-start;padding:0 0 0 4vw;box-sizing:border-box;pointer-events:none;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:#f2f6ff}
-#stable[hidden]{display:none}
-#stable .box{pointer-events:auto;width:min(420px,92vw);padding:20px 22px;border:2px solid #cfe2ff;border-radius:14px;background:linear-gradient(160deg,#2a5aaef2,#173a7cf2);box-shadow:0 8px 0 #0006;box-sizing:border-box}
-#stable h2{margin:0 0 4px;font-size:24px;letter-spacing:2px}#stable .sub{color:#c9d8f0;font-size:13px;margin-bottom:18px}
-#stable h3{margin:0 0 10px;font-size:16px;color:#f7d987}
-#stable .ends{display:flex;justify-content:space-between;font-size:14px;font-weight:700;margin-bottom:6px}
-#stable input[type=range]{width:100%;height:30px;accent-color:#ffb040;cursor:pointer}
-#stable .ticks{display:flex;justify-content:space-between;font-size:12px;color:#9fb6d8;margin-top:-2px}
-#stable .ticks span{cursor:pointer;padding:2px 4px}
-#stable .stats{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin:16px 0;padding:12px 14px;border-radius:10px;background:#0b1f4c99;font-size:14px}
-#stable .stats b{float:right}#stable .up{color:#7cf07c}#stable .dn{color:#ff9a8a}
-#stable .tip{font-size:12px;color:#c9d8f0;line-height:1.5;margin-bottom:16px}
-#stable .yard{font-size:12px;color:#ffe7a8;margin:-6px 0 12px}
-@media (max-width:640px) and (orientation:portrait){#stable{align-items:flex-start;justify-content:center;padding:10px 0 0}#stable .box{padding:14px 16px}#stable .sub,#stable .tip{display:none}#stable h2{font-size:20px}#stable .stats{margin:10px 0}}
-#stable .ok{width:100%;padding:12px;border:2px solid #7a5208;border-radius:10px;background:linear-gradient(#ffd75a,#f0a91c);color:#4a2c00;font:700 17px inherit;cursor:pointer}`;
+  st.textContent = `#mbar{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:9;display:flex;gap:8px;font:600 14px "PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:#f4f7ff}
+#mbar[hidden]{display:none}
+#mbar .pill{display:flex;align-items:center;gap:6px;padding:6px 14px;border:2px solid #9cc3ff;border-radius:999px;background:#102446e8;box-shadow:0 2px 0 #0007;white-space:nowrap;font:inherit;color:inherit}
+#mbar button.pill{cursor:pointer}#mbar button.pill:hover{background:#1d3a70}
+#prep{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;padding:56px 12px 12px;box-sizing:border-box;background:#050c16b0;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:#f2f6ff}
+#prep[hidden]{display:none}
+#prep .pp-box{width:min(600px,96vw);max-height:100%;overflow:auto;padding:18px 22px;border:2px solid #cfe2ff;border-radius:14px;background:linear-gradient(160deg,#2a5aaef2,#173a7cf2);box-shadow:0 8px 0 #0006;box-sizing:border-box}
+#prep h2{margin:0;font-size:24px;letter-spacing:2px}
+#prep .pp-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+#prep .pp-tabs{display:flex;gap:6px}
+#prep .pp-tabs button{cursor:pointer;padding:7px 16px;border:1px solid #9cc3ff88;border-radius:8px;background:#0c225a88;color:#e8f0ff;font:600 15px inherit}
+#prep .pp-tabs button[aria-selected=true]{background:#ffd75a;border-color:#7a5208;color:#4a2c00}
+#prep .pp-foot{display:flex;justify-content:space-between;gap:10px;margin-top:16px}
+#prep .pp-foot button{cursor:pointer;padding:11px 22px;border-radius:10px;font:700 16px inherit}
+#prep .pp-back{border:2px solid #cfe2ff;background:#123063;color:#fff}
+#prep .pp-next,#prep .pp-go{flex:1;border:2px solid #7a5208;background:linear-gradient(#ffd75a,#f0a91c);color:#4a2c00}
+#prep .soon{padding:14px;border-radius:10px;background:#0b1f4c99;color:#c9d8f0;font-size:14px;line-height:1.6}
+#prep .wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:10px}
+#prep .wgrid div{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #8fbbef66;border-radius:8px;background:#0d2a63aa;font-size:14px}
+#prep .wgrid b{display:grid;place-items:center;width:28px;height:28px;border-radius:6px;background:#2f5fb8;color:#fff}
+#prep .ends{display:flex;justify-content:space-between;font-size:14px;font-weight:700;margin:6px 0}
+#prep input[type=range]{width:100%;height:30px;accent-color:#ffb040;cursor:pointer}
+#prep .ticks{display:flex;justify-content:space-between;font-size:12px;color:#9fb6d8;margin-top:-2px}
+#prep .ticks span{cursor:pointer;padding:2px 4px}
+#prep .stats{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin:14px 0 10px;padding:12px 14px;border-radius:10px;background:#0b1f4c99;font-size:14px}
+#prep .stats b{float:right}#prep .up{color:#7cf07c}#prep .dn{color:#ff9a8a}
+#prep .tip{font-size:12px;color:#c9d8f0;line-height:1.5}#prep .yardtip{font-size:12px;color:#ffe7a8;margin-top:8px}
+#prep .stages{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+#prep .stage{cursor:pointer;text-align:left;padding:14px;border:2px solid #8fbbef88;border-radius:10px;background:#0c225a99;color:#fff;font:inherit}
+#prep .stage b{display:block;font-size:18px;color:#f7d987;margin-bottom:6px}#prep .stage span{font-size:12px;color:#c9d8f0}
+#prep .stage[aria-pressed=true]{border-color:#ffe9a8;background:#7a5a1a99}#prep .stage:disabled{opacity:.45;cursor:default}
+#prep.yard{background:none;pointer-events:none;justify-content:flex-start;padding-left:4vw}
+#prep.yard .pp-box{pointer-events:auto;width:min(430px,92vw)}
+@media (max-width:640px) and (orientation:portrait){#prep{padding-top:52px}#prep.yard{align-items:flex-start;justify-content:center;padding-left:12px}#prep.yard .tip{display:none}#prep .pp-box{padding:14px 16px}#prep h2{font-size:20px}#prep .pp-tabs button{padding:6px 12px;font-size:14px}}
+#toast{position:fixed;left:50%;top:60px;transform:translateX(-50%);z-index:12;padding:10px 18px;border-radius:10px;background:#000c;color:#fff;font:14px system-ui;pointer-events:none;transition:opacity .3s}`;
   document.head.append(st);
-  const el = document.createElement('div'); el.id = 'stable'; el.hidden = true;
-  el.innerHTML = `<div class="box"><h2>🐎 马厩</h2><div class="sub">你的马陪你走过所有战场。调教只改手感，不花钱，随时可以改。</div>
-<h3>调教方向</h3><div class="ends"><span>稳</span><span>烈</span></div>
-<input type="range" id="tmp" min="-100" max="100" step="1">
-<div class="ticks"><span data-v="-100">极稳</span><span data-v="0">中</span><span data-v="100">极烈</span></div>
-<div class="stats" id="tmpStats"></div>
-<div class="tip">稳：好控制，转弯和刹车更利落，冲锋后更少掉速。<br>烈：跑得更快，冲锋伤害上限更高，但转弯大、刹车慢。</div>
-<div class="yard">→ 旁边就是试马场：拖动画面或用 WASD 骑马，边调边试。撞草人看冲锋伤害。</div><button class="ok" id="tmpOk">好</button></div>`;
+  // 顶栏
+  const bar = document.createElement('div'); bar.id = 'mbar'; bar.hidden = true;
+  bar.innerHTML = `<span class="pill" title="军功">🎖 <span id="mbGold">0</span></span><button class="pill" data-p="dex">📖 图鉴</button><button class="pill" data-p="hero">🏆 英雄榜</button>`;
+  document.body.append(bar);
+  const toast = document.createElement('div'); toast.id = 'toast'; toast.style.opacity = 0; document.body.append(toast);
+  let tt = 0; const say = t => { toast.textContent = t; toast.style.opacity = 1; clearTimeout(tt); tt = setTimeout(() => toast.style.opacity = 0, 1800); };
+  bar.querySelector('[data-p=dex]').onclick = () => say('图鉴即将开放：收集遇到过的兵种、兵器和战场');
+  bar.querySelector('[data-p=hero]').onclick = () => say('英雄榜即将开放：用名字 + 口令认领你的成绩');
+  // 备战
+  const el = document.createElement('section'); el.id = 'prep'; el.hidden = true;
+  const W8 = Object.keys(CARD).filter(k => CARD[k].t === 'w');
+  el.innerHTML = `<div class="pp-box">
+<div class="pp-step" data-s="prep"><div class="pp-head"><h2>备战</h2><div class="pp-tabs"><button data-t="gear" aria-selected="true">⚔ 备战</button><button data-t="stable">🐎 马厩</button><button data-t="up">⬆ 强化</button></div></div>
+ <div class="pp-pane" data-t="gear"><div class="soon">出发前从拥有的兵器里挑 5 把带进战场（即将开放）。现在下面这些都会出现在升级三选一里。</div><div class="wgrid">${W8.map(k => `<div><b>${CARD[k].ic}</b>${CARD[k].nm}</div>`).join('')}</div></div>
+ <div class="pp-pane" data-t="stable" hidden><div class="ends"><span>稳</span><span>烈</span></div><input type="range" id="tmp" min="-100" max="100" step="1">
+  <div class="ticks"><span data-v="-100">极稳</span><span data-v="0">中</span><span data-v="100">极烈</span></div><div class="stats" id="tmpStats"></div>
+  <div class="tip">稳：好控制，转弯和刹车更利落，冲锋后更少掉速。烈：跑得更快，冲锋伤害上限更高，但转弯大、刹车慢。调教只改手感，不花钱，随时可以改。</div>
+  <div class="yardtip">→ 旁边就是试马场：拖动画面或用 WASD 骑马，边调边试，撞草人看冲锋伤害。</div></div>
+ <div class="pp-pane" data-t="up" hidden><div class="soon">永久强化（即将开放）：用军功训练你的马——冲击（撞击伤害、撞人少掉速）、耐力（生命上限）。</div></div>
+ <div class="pp-foot"><button class="pp-back">返回</button><button class="pp-next">下一步：选择战场</button></div></div>
+<div class="pp-step" data-s="stage" hidden><div class="pp-head"><h2>选择战场</h2></div>
+ <div class="stages"><button class="stage" aria-pressed="true"><b>第一章 · 高加米拉</b><span>公元前 331 年 · 亚历山大对大流士</span></button><button class="stage" disabled><b>第二章 · ？？？</b><span>未解锁</span></button></div>
+ <div class="pp-foot"><button class="pp-back">返回</button><button class="pp-go">出发！</button></div></div></div>`;
   document.body.append(el);
+  const step = s => el.querySelectorAll('.pp-step').forEach(x => x.hidden = x.dataset.s !== s);
+  const tab = t => {
+    el.querySelectorAll('.pp-tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.t === t));
+    el.querySelectorAll('.pp-pane').forEach(p => p.hidden = p.dataset.t !== t);
+    const yard = t === 'stable';
+    el.classList.toggle('yard', yard);
+    if (yard && !S.yard) enterYard(); else if (!yard && S.yard) { S.yard = false; demoScene(); }
+  };
+  el.querySelectorAll('.pp-tabs button').forEach(b => b.onclick = () => tab(b.dataset.t));
+  // 马厩滑块
   const sl = el.querySelector('#tmp'), out = el.querySelector('#tmpStats');
-  const pct = (v, inv) => { const n = Math.round(v * 100); const good = inv ? n > 0 : n > 0; return `<b class="${n === 0 ? '' : (n > 0) === !inv ? 'up' : 'dn'}">${n > 0 ? '+' : ''}${n}%</b>`; };
-  function show() {
-    const t = TMP();
-    out.innerHTML = `<span>最高速度 ${pct(t.spd - 1)}</span><span>加速 ${pct(t.acc - 1)}</span><span>转向 ${pct(t.turn - 1)}</span><span>刹车 ${pct(t.brake - 1)}</span>`;
-  }
-  function set(v) {   // 靠近刻度时轻轻吸附
-    for (const k of [-100, 0, 100]) if (Math.abs(v - k) < 6) v = k;
-    TEMPER = v / 100; sl.value = v; show();
-    try { localStorage.setItem('cs_temper', TEMPER); } catch (e) {}
-  }
+  const pct = v => { const n = Math.round(v * 100); return `<b class="${n === 0 ? '' : n > 0 ? 'up' : 'dn'}">${n > 0 ? '+' : ''}${n}%</b>`; };
+  const show = () => { const t = TMP(); out.innerHTML = `<span>最高速度 ${pct(t.spd - 1)}</span><span>加速 ${pct(t.acc - 1)}</span><span>转向 ${pct(t.turn - 1)}</span><span>刹车 ${pct(t.brake - 1)}</span>`; };
+  const set = v => { for (const k of [-100, 0, 100]) if (Math.abs(v - k) < 6) v = k; TEMPER = v / 100; sl.value = v; show(); try { localStorage.setItem('cs_temper', TEMPER); } catch (e) {} };
   sl.addEventListener('input', () => set(+sl.value));
   el.querySelectorAll('.ticks span').forEach(s => s.onclick = () => set(+s.dataset.v));
-  const close = () => { el.hidden = true; S.yard = false; openMenu(); };
-  el.querySelector('#tmpOk').onclick = close;
-  addEventListener('keydown', e => { if (!el.hidden && e.code === 'Escape') close(); });
-  document.getElementById('mm-stable').onclick = () => { sl.value = Math.round(TEMPER * 100); show(); mm.hidden = true; enterYard(); el.hidden = false; };
+  // 流程
+  const open = () => { sl.value = Math.round(TEMPER * 100); show(); step('prep'); tab('gear'); el.hidden = false; bar.hidden = false; mm.hidden = true; };
+  const home = () => { el.hidden = true; bar.hidden = true; S.yard = false; openMenu(); };
+  const go = () => { el.hidden = true; bar.hidden = true; el.classList.remove('yard'); S.yard = false; reset(false); };
+  el.querySelector('[data-s=prep] .pp-back').onclick = home;
+  el.querySelector('.pp-next').onclick = () => { if (S.yard) { S.yard = false; demoScene(); } el.classList.remove('yard'); step('stage'); };
+  el.querySelector('[data-s=stage] .pp-back').onclick = () => { step('prep'); tab('gear'); };
+  el.querySelector('.pp-go').onclick = go;
+  addEventListener('keydown', e => { if (!el.hidden && e.code === 'Escape') [...el.querySelectorAll('.pp-back')].find(b => b.offsetParent)?.click(); });
+  // 首页：名字必填，口令可选
+  const nm = document.getElementById('mm-name'), pin = document.getElementById('mm-pin'), startBtn = document.getElementById('mm-start');
+  try { pin.value = localStorage.getItem('cs_pin') || ''; } catch (e) {}
+  pin.addEventListener('input', () => { try { localStorage.setItem('cs_pin', pin.value); } catch (e) {} });
+  const sync = () => startBtn.classList.toggle('off', !nm.value.trim());
+  nm.addEventListener('input', () => { nm.classList.remove('need'); sync(); }); setTimeout(sync, 0);
+  startBtn.onclick = () => { if (!nm.value.trim()) { nm.classList.add('need'); nm.focus(); return; } open(); };
 })();
 try { const nm = localStorage.getItem('cs_name'); if (nm) document.getElementById('mm-name').value = nm; } catch (e) {}
 document.getElementById('mm-name').addEventListener('input', ev => { try { localStorage.setItem('cs_name', ev.target.value); } catch (e) {} });
