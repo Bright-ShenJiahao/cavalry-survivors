@@ -93,7 +93,7 @@ function shieldBash(o, lv) {
 // ---- 击杀掉落 ----
 const GEM_V = { grunt: 1, pha: 1, cav: 3, brute: 5, char: 3 };
 function runKill(e) {
-  const R = S.run; if (!R || S.demo) return;
+  const R = S.run; if (!R || S.demo || S.yard) return;   // 试马场不掉经验
   const v = GEM_V[e.type] || 1;
   if (R.gems.length < 350) R.gems.push({ x: e.x + rand(-6, 6), y: e.y + rand(-6, 6), v });
   else R.gems[(Math.random() * R.gems.length) | 0].v += v;
