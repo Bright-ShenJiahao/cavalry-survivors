@@ -541,7 +541,7 @@ function addNum(x, y, txt, col, big) {
 const GRAV = 1400;
 function hit(e, dmg, kx, ky, kp) {
   if (e.dead) return;
-  dmg *= runAtk();
+  dmg *= runAtk() * runVuln(e);   // 力量/蓄势 × 鸣镝标记/破盾
   e.hp -= dmg; e.flash = 0.1;
   addNum(e.x, e.y, Math.round(dmg), dmg >= 30 ? '#ffb030' : '#fff', dmg >= 30);
   if (e.hp <= 0) {
@@ -557,6 +557,7 @@ function hit(e, dmg, kx, ky, kp) {
 
 function hurtRider(rd, dmg, show) {
   if (P.god || S.demo) return;
+  if (runBlock(rd, dmg)) return;   // 骑兵小盾格挡、铁锏反击（src/run.js）
   rd.hp -= dmg;
   if (show) { rd.flash = 0.12; addNum(rd.x, rd.y - 14, Math.round(dmg), '#ff5050', false); }
 }
@@ -628,7 +629,8 @@ function updEnemies(dt) {
       const dx = tg.x - e.x, dy = tg.y - e.y;
       // 会绕开摆件；实在绕不开（锁定冲锋中）才撞过去
       const av = propAvoid(e.x, e.y, Math.cos(e.a), Math.sin(e.a), 60 + e.v * 0.4, e.r);
-      if (e.commit > 0) { e.commit -= dt; steer(e, Math.cos(e.a), Math.sin(e.a), 1, dt, qc); }
+      if (runStun(e)) { steer(e, 0, 0, 0, dt, qc); e.v *= 0.9; }
+      else if (e.commit > 0) { e.commit -= dt; steer(e, Math.cos(e.a), Math.sin(e.a), 1, dt, qc); }
       else {
         const facing = (Math.cos(e.a) * dx + Math.sin(e.a) * dy) / (td || 1);
         if (td < 70 && facing < 0.3 && e.v > qc.max * 0.5) e.commit = 0.9;
@@ -639,7 +641,7 @@ function updEnemies(dt) {
       if (e.v > P.maxSpeed * 0.45 && Math.random() < 0.3) S.dust.push({ x: e.x - Math.cos(e.a) * 18, y: e.y - Math.sin(e.a) * 18, t: 0.45, r: rand(3, 5) });
     } else {
       let dx = tg.x - e.x, dy = tg.y - e.y, d = td || 1;
-      const esp = e.sp * (mudAt(e.x, e.y) ? 0.6 : 1);
+      const esp = e.sp * (mudAt(e.x, e.y) ? 0.6 : 1) * runSlow(e);   // 倒地 / 被套 / 踩蒺藜
       let mx = dx / d * esp, my = dy / d * esp;
       const cx = (e.x / CELL) | 0, cy = (e.y / CELL) | 0;
       for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
@@ -666,7 +668,7 @@ function updEnemies(dt) {
       if (d >= rr + 4) continue;
       const nx = dx / d, ny = dy / d, r = ratio(rd), m = mult(rd);
       if (d < rr) {
-        if (e.type === 'grunt') {
+        if (e.type === 'grunt' || (e.sb && (e.type === 'brute' || e.type === 'pha'))) {   // 盾被投斧砸碎后能撞飞
           if (r >= P.charge) {
             hit(e, P.ramBase * m, fx * 0.7 + nx * 0.6, fy * 0.7 + ny * 0.6, rd.v * 1.3 + 250);
             rd.v *= 0.99;
@@ -715,7 +717,7 @@ function updEnemies(dt) {
         }
       }
       // 步兵贴身伤害
-      if (!e.dead && e.type !== 'cav' && e.type !== 'char' && e.type !== 'dar') hurtRider(rd, (e.type === 'brute' ? 20 : e.type === 'pha' ? 8 : 5) * dt, false);
+      if (!e.dead && e.type !== 'cav' && e.type !== 'char' && e.type !== 'dar' && !runNoAtk(e)) hurtRider(rd, (e.type === 'brute' ? 20 : e.type === 'pha' ? 8 : 5) * dt, false);
     }
   }
   S.en = S.en.filter(e => !e.gone && (!e.dead || e.fly > 0));
