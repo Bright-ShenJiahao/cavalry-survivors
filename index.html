@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>骑兵幸存者 · 原型</title>
+<title>骑兵幸存者：冲锋与魔法</title>
 <style>
 html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:none;-webkit-user-select:none;user-select:none;font-family:system-ui,sans-serif}
 #c{display:block;position:fixed;inset:0;width:100vw;height:100vh}
@@ -18,7 +18,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:n
 #main-menu[hidden]{display:none}
 .mm-profile{width:290px;flex-shrink:0;text-align:center}
 .mm-eyebrow{font-size:11px;letter-spacing:.45em;color:#c9d8e8;margin-bottom:10px}
-.mm-title{font-family:serif;font-size:46px;letter-spacing:.08em;color:#f7d987;text-shadow:0 3px #513c1c,0 6px 20px #000;margin:0;white-space:nowrap}
+.mm-title{font-family:serif;font-size:46px;letter-spacing:.08em;color:#f7d987;text-shadow:0 3px #513c1c,0 6px 20px #000;margin:0;white-space:nowrap;line-height:1.1}.mm-t2{display:block;font-size:.5em;letter-spacing:.3em;color:#ffb070;margin-top:4px}.mm-tag{max-width:300px;margin:0 auto 10px;font-size:12px;line-height:1.5;color:#d8c8a8;text-shadow:0 1px 3px #000}
 .mm-sub{font-size:13px;letter-spacing:.3em;color:#e9d9a8;margin:4px 0 22px;text-shadow:0 2px #000}
 .mm-card{width:218px;height:168px;margin:auto;border:2px solid #77baff;border-radius:10px;background:radial-gradient(ellipse at 50% 92%,#37578b88,transparent 65%),#101e38c8;box-shadow:0 0 0 3px #0d1938aa,0 14px 38px #0005;display:grid;place-items:center}
 .mm-card canvas{width:200px;height:150px}
@@ -34,7 +34,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:n
 .mm-grid button:hover{background:#77a9f044;border-color:#c1e0ff}
 .mm-note{color:#c3d3ef;font-size:12px;line-height:1.7;margin-top:16px;border-top:1px solid #9ebfe432;padding-top:12px}
 @media (max-height:520px){#main-menu{gap:28px;padding:12px}.mm-title{font-size:34px}.mm-sub{margin-bottom:12px}.mm-card{width:180px;height:130px}.mm-card canvas{width:170px;height:122px}.mm-name{margin-top:10px;width:190px}.mm-name input{padding:8px}.mm-panel{width:320px;padding:16px}.mm-start{padding:11px 14px;margin-bottom:12px;font-size:20px!important}.mm-grid button{padding:9px 10px}.mm-note{display:none}.mm-eyebrow{margin-bottom:4px}}
-@media (max-width:640px) and (orientation:portrait){#main-menu{flex-direction:column;gap:18px}}
+@media (max-width:640px) and (orientation:portrait){#main-menu{flex-direction:column;gap:14px;justify-content:safe center;overflow-y:auto;padding-top:16px}.mm-title{font-size:40px}.mm-card{height:150px}.mm-card canvas{height:142px}}
 #loading .ld-bg{position:absolute;inset:-30px;background:center/cover no-repeat;filter:blur(18px) brightness(.6)}
 #loading .ld-img{position:absolute;inset:0;background:center/contain no-repeat}
 #loading{position:fixed;inset:0;z-index:20;overflow:hidden;background:#1a1208;transition:opacity .6s;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
@@ -48,13 +48,14 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1a1a1a;touch-action:n
 </style>
 </head>
 <body>
-<div id="loading"><div class="ld-bg"></div><div class="ld-img"></div><div class="ld-foot"><div class="ld-title">骑兵幸存者</div><div class="ld-bar"><i id="ld-fill"></i></div><div class="ld-tip" id="ld-tip">正在穿越到高加米拉……</div></div></div>
+<div id="loading"><div class="ld-bg"></div><div class="ld-img"></div><div class="ld-foot"><div class="ld-title">骑兵幸存者：冲锋与魔法</div><div class="ld-bar"><i id="ld-fill"></i></div><div class="ld-tip" id="ld-tip">正在穿越到高加米拉……</div></div></div>
 <canvas id="c"></canvas>
 <div id="main-menu" hidden>
   <div class="mm-profile">
     <div class="mm-eyebrow">穿 越 者 的 冲 锋</div>
-    <h1 class="mm-title">骑兵幸存者</h1>
+    <h1 class="mm-title">骑兵幸存者<span class="mm-t2">冲锋与魔法</span></h1>
     <div class="mm-sub">CAVALRY SURVIVORS</div>
+    <div class="mm-tag">穿越历史骑兵战场，冲锋、割草，在战火中觉醒魔法。</div>
     <div class="mm-card"><canvas id="mm-hero" width="400" height="300"></canvas></div>
     <label class="mm-name"><input id="mm-name" maxlength="12" placeholder="输入你的名字"></label>
   </div>

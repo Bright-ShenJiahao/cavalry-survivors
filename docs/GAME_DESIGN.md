@@ -1,4 +1,7 @@
-# 骑兵幸存者 · Cavalry Survivors · 騎兵サバイバーズ —— 设计总表
+# 骑兵幸存者：冲锋与魔法 · Cavalry Survivors · 騎兵サバイバーズ —— 设计总表
+
+- ✅ 中文名：**骑兵幸存者：冲锋与魔法**（2026-11-05）。英文、日文副标题 ⏳ 待定。
+- ✅ 宣传语：「穿越历史骑兵战场，冲锋、割草，在战火中觉醒魔法。」/ *Charge through history's greatest cavalry battles — and awaken the magic within.*
 
 > 状态：讨论中，逐项定稿。✅ = 已定，⏳ = 待定 / 待做。结构参考异世界幸存者（sanguoxingcunzhe 仓库 docs/GAME_DESIGN.md）。
 
