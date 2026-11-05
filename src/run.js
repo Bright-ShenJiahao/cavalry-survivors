@@ -7,14 +7,14 @@ const CARD = {
   // ---- 专属（金框，不占格子）----
   lance: { t: 'g', nm: '骑枪', ic: '矛', d: ['刺正前方 100° 内的敌人，伤害靠马速', '伤害 +30%', '枪更长：攻击范围 +25%', '出枪更快', '满级「贯阵」：冲锋速度下一枪贯穿前方一条线'] },
   // ---- 兵器（蓝框）----
-  sabre: { t: 'w', nm: '马刀', ic: '刀', d: ['冲过人群时顺手劈两侧（速度 40% 以上才出刀）', '伤害 +30%', '刀光更长', '砍得更快', '满级「劈斩」：冲锋速度下砍飞敌人，飞出去的人会撞倒后面的人'] },
+  sabre: { t: 'w', nm: '马刀', ic: '刀', d: ['跑起来（速度 40% 以上）左右各劈出一道大弯月刀光，越快越痛', '伤害 +30%', '刀光更长', '砍得更快', '满级「劈斩」：冲锋速度下砍飞敌人，飞出去的人会撞倒后面的人'] },
   mbow: { t: 'w', nm: '蒙古短弓', ic: '弓', d: ['射两侧（左右各 90°），射程 300，箭带上马速；每第 5 支是鸣镝：被射中的敌人 4 秒内受伤 +40%。骑射手左手持弓，往左射最顺', '伤害 +30%', '左右各多射 1 支', '每第 3 支就是鸣镝', '满级「箭袋」：每轮混入破甲重箭或火箭'] },
   rbow: { t: 'w', nm: '回马弓', ic: '返', d: ['帕提亚回马箭：只射后方 140° 的追兵。跑起来射得快，停下来射得慢', '伤害 +30%', '每次多射 1 支', '射得更快', '满级「回马箭雨」：每次 3 支扇形箭，穿透 2 人'] },
-  jav: { t: 'w', nm: '标枪', ic: '标', d: ['自动锁定最强的敌人，高爆发单体。带 2 支，掷出的标枪插在地上，骑过去能捡回', '伤害 +30%', '多带 1 支', '补得更快', '满级「破盾」：命中的敌人 6 秒内受伤 +50%'] },
-  axe: { t: 'w', nm: '投斧', ic: '斧', d: ['朝前方敌人最密处投出，弹跳打 3 人，砸碎盾牌（之后受伤 +50%，冲锋能撞飞）', '伤害 +30%', '多弹 1 次', '多带 1 把、补得更快', '满级「穿心」：砸死一个后继续弹，不消耗弹跳次数'] },
-  lasso: { t: 'w', nm: '套索', ic: '索', d: ['近身套住一个敌人（他减速、不能攻击），骑马拉开到绳长时拽飞，高额伤害', '拽飞伤害 +30%', '绳子更长，拽得更狠', '套得更远、冷却更短', '满级「绊马索」：绳子绷直时横扫，路上的敌人全部绊倒'] },
+  jav: { t: 'w', nm: '标枪', ic: '标', d: ['自动锁定最强的敌人，高爆发单体。带 2 支，每 2.5 秒补 1 支；掷出的标枪插在地上，靠近就会飞回手里', '伤害 +30%', '多带 1 支', '补得更快', '满级「破盾」：命中的敌人 6 秒内受伤 +50%'] },
+  axe: { t: 'w', nm: '投斧', ic: '斧', d: ['往前上方高高抛出 2 把斧，划抛物线落下，一路穿过所有人；砸碎盾牌（之后受伤 +50%，冲锋能撞飞）。法兰克人接战前先投一轮', '伤害 +30%', '多抛 1 把', '再多 1 把、抛得更快', '满级「开裂」：斧头落地时震开一圈'] },
+  lasso: { t: 'w', nm: '套索', ic: '索', d: ['朝敌人最密处抛出绳套，地上出现一个圈，圈里的人被捆住；1 秒后收紧，全部击飞', '伤害 +30%', '圈更大', '冷却更短', '满级「连环套」：同时套两处'] },
   calt: { t: 'w', nm: '铁蒺藜', ic: '蒺', d: ['跑起来在马后撒铁蒺藜，追兵踩到受伤减速，敌骑会失蹄', '伤害 +30%', '存在更久（9 秒）', '撒得更宽更密', '满级「马失前蹄」：敌骑踩到摔倒 2 秒，步兵踩到倒地'] },
-  mace: { t: 'w', nm: '铁锏', ic: '锏', d: ['解围：低速时砸周围一圈，被近身打中时立刻反击，把人推开', '伤害 +30%', '范围 +25%', '冷却更短', '满级「双锏」：连砸两下，第二下击退很远并让人倒地'] },
+  mace: { t: 'w', nm: '战锤', ic: '锤', d: ['身边有敌人就砸地，冲击波向外扩散到 120，推开所有人；被近身打中时立刻反击', '伤害 +30%', '冲击波更远（150）', '砸得更勤', '满级「双震」：连震两圈，第二圈让人倒地'] },
   shield: { t: 'w', nm: '骑兵小盾', ic: '盾', d: ['每 6 秒充好一次，自动挡下下一次伤害，并盾击攻击者', '充得更快（4.5 秒）', '盾击伤害 +50% 并让对方倒地', '可以存 2 次', '满级「盾墙」：亲卫每 8 秒也能挡一次'] },
   // ---- 战法（紫框）----
   horn: { t: 's', nm: '冲锋号', ic: '号', d: ['每 14 秒：全队 3 秒内极速 +25%、加速更猛', '冷却 -2 秒', '持续 +1 秒', '冷却 -2 秒', '满级：号响时亲卫回满血'] },
@@ -42,7 +42,7 @@ const runNeed = lv => Math.round((6 + lv * 4 + lv * lv * 0.35) * (P.xpNeed || 1)
 function runReset() {
   if (typeof LVUI !== 'undefined' && LVUI) LVUI.hidden = true;
   if (typeof SLOT !== 'undefined' && SLOT) SLOT.hidden = true;
-  S.run = { lv: 1, xp: 0, need: runNeed(1), g: { lance: 1 }, w: {}, s: {}, b: {}, surge: 0, hm: 0, hist: [], hmCd: 0, sticks: [], calt: [], lasso: null, sh: 0, shT: 0, shInv: 0, cd: {}, gems: [], chests: [], shots: [], fx: [], jobs: [], ang: 0, queue: 0, rr: 0, lastLv: -9, horn: 0, chestN: 0 };
+  S.run = { lv: 1, xp: 0, need: runNeed(1), g: { lance: 1 }, w: {}, s: {}, b: {}, surge: 0, hm: 0, hist: [], hmCd: 0, sticks: [], calt: [], lasso: null, loops: [], waves: [], sh: 0, shT: 0, shInv: 0, cd: {}, gems: [], chests: [], shots: [], fx: [], jobs: [], ang: 0, queue: 0, rr: 0, lastLv: -9, horn: 0, chestN: 0 };
 }
 // ---- 派生数值 ----
 const runAtk = () => S.run ? (1 + 0.1 * (S.run.b.str || 0)) * (1 + S.run.surge) : 1;
@@ -73,18 +73,10 @@ function runBlock(rd, dmg) {
   } else if (R.w.shield >= 5 && (rd.shU || 0) <= S.t) { rd.shU = S.t + 8; shieldBash(rd, 3); return true; }
   return false;
 }
-function maceSmash(lv) {
-  const L = S.h, r = 60 * (lv >= 3 ? 1.25 : 1), dmg = 20 * (lv >= 2 ? 1.3 : 1);
-  const go = (push, stun) => {
-    for (const e of S.en) {
-      if (e.dead) continue;
-      const dx = e.x - L.x, dy = e.y - L.y, d = Math.hypot(dx, dy) || 1;
-      if (d < r + e.r) { hit(e, dmg, dx / d, dy / d, 220); if (!e.dead && e.type !== 'dar') { e.x += dx / d * push; e.y += dy / d * push; if (stun) cc(e, 1); } }
-    }
-    S.run.fx.push({ k: 'ring', x: L.x, y: L.y, r: r + push * 0.3, t: 0, d: 0.3, col: '#c8ccd8' });
-  };
-  go(40, false);
-  if (lv >= 5) S.run.jobs.push({ t: 0.25, f: () => go(110, true) });
+function maceSmash(lv) {   // 战锤：砸地，冲击波向外扩散（参考吸血鬼的大蒜 + 震地）
+  const L = S.h, max = lv >= 3 ? 150 : 120, dmg = 18 * (lv >= 2 ? 1.3 : 1);
+  S.run.waves.push({ x: L.x, y: L.y, r: 10, max, dmg, push: 50, hit: new Set() });
+  if (lv >= 5) S.run.jobs.push({ t: 0.3, f: () => S.run.waves.push({ x: S.h.x, y: S.h.y, r: 10, max: max * 1.15, dmg: dmg * 0.8, push: 30, stun: true, hit: new Set() }) });
 }
 function shieldBash(o, lv) {
   let best = null, bd = 70;
@@ -154,20 +146,55 @@ function runUpdate(dt) {
   for (const s of R.shots) {
     if (s.home && !s.home.dead) { const dx = s.home.x - s.x, dy = s.home.y - s.y, d = Math.hypot(dx, dy) || 1; s.vx = dx / d * s.sp; s.vy = dy / d * s.sp; }
     s.t -= dt; s.x += s.vx * dt; s.y += s.vy * dt; s.rot = (s.rot || 0) + dt * 16;
+    if (s.vz !== undefined) { s.z += s.vz * dt; s.vz -= 900 * dt; if (s.z <= 0) { s.t = 0; if (s.boom) aoe(s.x, s.y, 55, s.dmg * 0.7, 200, '#d8c8a0'); } }
     for (const e of S.en) {
       if (e.dead || s.hit.has(e)) continue;
       const dx = e.x - s.x, dy = e.y - s.y;
-      if (dx * dx + dy * dy < (e.r + s.r) ** 2) { shotHit(s, e); if (s.t <= 0 || s.k === 'axe') break; }
+      if (dx * dx + dy * dy < (e.r + s.r) ** 2) { shotHit(s, e); if (s.t <= 0) break; }
     }
-    if (s.t <= 0 && s.k === 'jav' && !s.stuck) { s.stuck = 1; R.sticks.push({ x: s.x, y: s.y, a: Math.atan2(s.vy, s.vx), t: 6 }); }
+    if (s.t <= 0 && s.k === 'jav' && !s.stuck) { s.stuck = 1; R.sticks.push({ x: s.x, y: s.y, a: Math.atan2(s.vy, s.vx), t: 10 }); }
   }
   R.shots = R.shots.filter(s => s.t > 0);
   // 插在地上的标枪：骑过去捡回
   for (const k of R.sticks) {
     k.t -= dt;
-    if (Math.hypot(k.x - L.x, k.y - L.y) < 36) { k.t = 0; if (R.w.jav && R.jAmmo < (R.w.jav >= 3 ? 3 : 2)) { R.jAmmo++; addNum(L.x, L.y - 30, '捡回标枪', '#d8e8ff', false); } }
+    const kd = Math.hypot(k.x - L.x, k.y - L.y);
+    if (kd < 120 || k.fly) { k.fly = true; const sp = 500 + L.v; k.x += (L.x - k.x) / (kd || 1) * sp * dt; k.y += (L.y - k.y) / (kd || 1) * sp * dt; }   // 像经验宝石一样飞回手里
+    if (kd < 26) { k.t = 0; if (R.w.jav && R.jAmmo < (R.w.jav >= 3 ? 3 : 2)) { R.jAmmo++; addNum(L.x, L.y - 30, '捡回标枪', '#d8e8ff', false); } }
   }
   R.sticks = R.sticks.filter(k => k.t > 0);
+  // 套索的圈：圈里的人被捆住减速，时间到收紧全部击飞
+  for (const lp of R.loops) {
+    lp.t += dt;
+    for (const e of S.en) if (!e.dead && Math.abs(e.x - lp.x) < lp.r && Math.abs(e.y - lp.y) < lp.r && Math.hypot(e.x - lp.x, e.y - lp.y) < lp.r) slowE(e, 0.15, 0.1);
+    if (lp.t >= lp.d) {
+      lp.done = true;
+      for (const e of S.en) {
+        if (e.dead) continue;
+        const dx = e.x - lp.x, dy = e.y - lp.y, d = Math.hypot(dx, dy) || 1;
+        if (d > lp.r + e.r) continue;
+        hit(e, lp.dmg * (0.7 + 0.3 * mult(L)), dx / d, dy / d, 480);
+        if (e.dead) e.missile = lp.dmg * 0.4;
+        else if (e.type !== 'dar') { e.x += dx / d * 45; e.y += dy / d * 45; cc(e, 0.8); }
+      }
+      R.fx.push({ k: 'ring', x: lp.x, y: lp.y, r: lp.r, t: 0, d: 0.3, col: '#f0dca0' });
+    }
+  }
+  R.loops = R.loops.filter(lp => !lp.done);
+  // 战锤的冲击波：从中心向外扩散，波前扫过的人受伤并被推开
+  for (const w of R.waves) {
+    const r0 = w.r; w.r = Math.min(w.max, w.r + w.max / 0.35 * dt);
+    for (const e of S.en) {
+      if (e.dead || w.hit.has(e)) continue;
+      const dx = e.x - w.x, dy = e.y - w.y, d = Math.hypot(dx, dy) || 1;
+      if (d < w.r + e.r) {
+        w.hit.add(e); hit(e, w.dmg, dx / d, dy / d, 260);
+        if (!e.dead && e.type !== 'dar') { e.x += dx / d * w.push; e.y += dy / d * w.push; if (w.stun) cc(e, 1); }
+      }
+    }
+    if (w.r >= w.max) w.done = true;
+  }
+  R.waves = R.waves.filter(w => !w.done);
   for (const f of R.fx) f.t += dt;
   R.fx = R.fx.filter(f => f.t < f.d);
 }
@@ -179,14 +206,7 @@ function shotHit(s, e) {
   if (s.mark) e.markU = S.t + 4;
   if (s.vuln) e.vulnU = S.t + 6;
   if (s.fire) aoe(e.x, e.y, 40, s.dmg * 0.6, 80, '#ff8a30');
-  if (s.k === 'axe') {
-    e.sb = true;   // 盾被砸碎
-    if (!(s.chain && e.dead)) s.n--;
-    const nx = s.n > 0 ? S.en.filter(o => !o.dead && !s.hit.has(o) && Math.abs(o.x - e.x) < 130 && Math.abs(o.y - e.y) < 130).sort((a, b) => (a.x - e.x) ** 2 + (a.y - e.y) ** 2 - (b.x - e.x) ** 2 - (b.y - e.y) ** 2)[0] : null;
-    if (!nx) { s.t = 0; return; }
-    s.home = nx; s.t = 0.6; s.x = e.x; s.y = e.y;
-    return;
-  }
+  if (s.k === 'axe') e.sb = true;   // 盾被砸碎
   if (s.pierce-- <= 0) s.t = 0;
 }
 function shootV(x, y, a, sp, t, dmg, o) {   // o: { k, pierce, r, mark, fire, vuln, kp, home, inherit, n, chain }
@@ -213,24 +233,22 @@ const anyNear = (x, y, r) => S.en.some(e => !e.dead && Math.abs(e.x - x) < r && 
 
 // ---- 兵器 ----
 const WEAP = {
-  sabre(lv, dt) {
-    // 冲过人群时顺手劈：马身两侧一条长刀光，速度 40% 以上才出刀
-    const L = S.h; if (ratio(L) < 0.4) return;
-    const c = Math.cos(L.a), s = Math.sin(L.a), f0 = -30, f1 = 55 * (lv >= 3 ? 1.5 : 1), l0 = 12, l1 = 70;
-    const inZone = e => { const dx = e.x - L.x, dy = e.y - L.y, f = dx * c + dy * s, l = Math.abs(-dx * s + dy * c); return f > f0 - e.r && f < f1 + e.r && l > l0 - e.r && l < l1 + e.r; };
-    const R = S.run; R.cd.sabre = (R.cd.sabre || 0) - dt;
-    if (R.cd.sabre > 0) return;
-    const tg = S.en.filter(e => !e.dead && Math.abs(e.x - L.x) < 140 && Math.abs(e.y - L.y) < 140 && inZone(e));
-    if (!tg.length) return;
-    R.cd.sabre = (lv >= 4 ? 0.35 : 0.5) * runCdm();
+  sabre(lv, dt) {   // 马刀：跑起来左右各一道大弯月（参考吸血鬼的鞭子），越快越痛
+    const L = S.h, R = S.run; if (ratio(L) < 0.4) return;
+    R.cd.sabre = (R.cd.sabre || 0) - dt; if (R.cd.sabre > 0) return;
+    if (!anyNear(L.x, L.y, 170)) return;
+    R.cd.sabre = (lv >= 4 ? 0.45 : 0.6) * runCdm();
+    const c = Math.cos(L.a), s = Math.sin(L.a), f0 = -45, f1 = lv >= 3 ? 120 : 85, l0 = 14, l1 = 110;
     const chg = lv >= 5 && ratio(L) >= P.charge, dmg = 8 * (lv >= 2 ? 1.3 : 1) * mult(L) * (chg ? 1.5 : 1);
-    for (const e of tg) {
-      const dx = e.x - L.x, dy = e.y - L.y, sd = (-dx * s + dy * c) > 0 ? 1 : -1;
-      hit(e, dmg, -s * sd * 0.8 + c * 0.6, c * sd * 0.8 + s * 0.6, chg ? 560 : 220);
+    for (const e of S.en) {
+      if (e.dead || Math.abs(e.x - L.x) > 170 || Math.abs(e.y - L.y) > 170) continue;
+      const dx = e.x - L.x, dy = e.y - L.y, f = dx * c + dy * s, l = -dx * s + dy * c, al = Math.abs(l);
+      if (f < f0 - e.r || f > f1 + e.r || al < l0 - e.r || al > l1 + e.r) continue;
+      const sd = l > 0 ? 1 : -1;
+      hit(e, dmg, -s * sd * 0.8 + c * 0.6, c * sd * 0.8 + s * 0.6, chg ? 560 : 240);
       if (chg && e.dead && e.type === 'grunt') e.missile = dmg * 0.5;
     }
-    const sides = new Set(tg.map(e => ((-(e.x - L.x) * s + (e.y - L.y) * c) > 0 ? 1 : -1)));
-    for (const sd of sides) S.run.fx.push({ k: 'sw', x: L.x, y: L.y, a: L.a, sd, f0, f1, l: 40, t: 0, d: 0.2 });
+    for (const sd of [-1, 1]) R.fx.push({ k: 'sw', x: L.x, y: L.y, a: L.a, sd, f0, f1, l: l1 - 20, t: 0, d: 0.22 });
   },
   mbow(lv, dt) {   // 蒙古短弓：两侧各 90°，鸣镝标记
     const L = S.h, R = S.run;
@@ -272,7 +290,7 @@ const WEAP = {
   jav(lv, dt) {   // 标枪：锁定最强的敌人，高爆发单体；插地可捡回
     const L = S.h, R = S.run, cap = lv >= 3 ? 3 : 2;
     if (R.jAmmo === undefined) R.jAmmo = cap;
-    if (R.jAmmo < cap) { R.jRef = (R.jRef || 0) + dt; if (R.jRef >= (lv >= 4 ? 2.8 : 4) * runCdm()) { R.jAmmo++; R.jRef = 0; } } else R.jRef = 0;
+    if (R.jAmmo < cap) { R.jRef = (R.jRef || 0) + dt; if (R.jRef >= (lv >= 4 ? 1.8 : 2.5) * runCdm()) { R.jAmmo++; R.jRef = 0; } } else R.jRef = 0;
     let best = null, bs = -1;
     for (const e of S.en) {
       if (e.dead) continue;
@@ -287,49 +305,37 @@ const WEAP = {
     const dmg = 60 * (1 + 0.5 * Math.min(1, ratio(L))) * (lv >= 2 ? 1.3 : 1);
     shootV(L.x, L.y, Math.atan2(best.y - L.y, best.x - L.x), 600, 1.2, dmg, { k: 'jav', r: 8, kp: 320, vuln: lv >= 5, home: best });
   },
-  axe(lv, dt) {   // 投斧：朝前方最密处投，弹跳、破盾
-    const L = S.h, R = S.run, cap = lv >= 4 ? 4 : 3;
-    if (R.aAmmo === undefined) R.aAmmo = cap;
-    if (R.aAmmo < cap) { R.aRef = (R.aRef || 0) + dt; if (R.aRef >= (lv >= 4 ? 1.4 : 2) * runCdm()) { R.aAmmo++; R.aRef = 0; } } else R.aRef = 0;
-    R.cd.axe = (R.cd.axe || 0) - dt;
-    if (R.cd.axe > 0 || R.aAmmo <= 0) return;
-    const cand = S.en.filter(e => !e.dead && Math.abs(e.x - L.x) < 190 && Math.abs(e.y - L.y) < 190 && inArc(L, e, L.a, Math.PI / 2, 180));
-    if (!cand.length) return;
-    let best = cand[0], bn = -1;
-    for (let q = 0; q < Math.min(10, cand.length); q++) {
-      const c = cand[(Math.random() * cand.length) | 0];
-      let n = 0; for (const o of cand) if (Math.abs(o.x - c.x) < 60 && Math.abs(o.y - c.y) < 60) n++;
-      if (n > bn) { bn = n; best = c; }
+  axe(lv, dt) {   // 投斧：往前上方抛出，抛物线落下，一路穿过所有人（参考吸血鬼的斧头）
+    const L = S.h, R = S.run;
+    R.cd.axe = (R.cd.axe || 0) - dt; if (R.cd.axe > 0) return;
+    if (!anyNear(L.x + Math.cos(L.a) * 120, L.y + Math.sin(L.a) * 120, 220)) return;
+    R.cd.axe = (lv >= 4 ? 1.1 : 1.5) * runCdm();
+    const n = 2 + (lv >= 3) + (lv >= 4), dmg = 20 * (lv >= 2 ? 1.3 : 1);
+    for (let i = 0; i < n; i++) {
+      const a = L.a + (n > 1 ? (i / (n - 1) - 0.5) * 1.1 : 0) + rand(-0.12, 0.12), sp = rand(230, 300) + L.v * 0.6;
+      R.jobs.push({ t: i * 0.06, f: () => shootV(L.x, L.y, a, sp, 1.1, dmg, { k: 'axe', r: 12, kp: 260, pierce: 999, z: 20, vz: rand(380, 460), boom: lv >= 5 }) });
     }
-    R.cd.axe = 0.45; R.aAmmo--;
-    shootV(L.x, L.y, Math.atan2(best.y - L.y, best.x - L.x), 440, 0.8, 20 * (lv >= 2 ? 1.3 : 1), { k: 'axe', r: 9, kp: 200, home: best, n: lv >= 3 ? 4 : 3, chain: lv >= 5 });
   },
-  lasso(lv, dt) {   // 套索：近身套住，拉开到绳长时拽飞
-    const L = S.h, R = S.run, len = lv >= 3 ? 210 : 160, reach = lv >= 4 ? 90 : 60;
-    if (R.lasso && (R.lasso.e.dead || R.lasso.e.gone)) R.lasso = null;
-    if (!R.lasso) {
-      R.cd.lasso = (R.cd.lasso || 0) - dt; if (R.cd.lasso > 0) return;
-      let best = null, bs = -1;
-      for (const e of S.en) { if (e.dead) continue; const d = Math.hypot(e.x - L.x, e.y - L.y); if (d < reach + e.r && e.max > bs) { bs = e.max; best = e; } }
-      if (best) { R.lasso = { e: best }; R.fx.push({ k: 'ring', x: best.x, y: best.y, r: 18, t: 0, d: 0.3, col: '#e8d8a0' }); }
-      return;
-    }
-    const e = R.lasso.e, dx = e.x - L.x, dy = e.y - L.y, d = Math.hypot(dx, dy) || 1;
-    if (d < len) return;
-    const nx = -dx / d, ny = -dy / d, dmg = 50 * mult(L) * (lv >= 2 ? 1.3 : 1);
-    R.fx.push({ k: 'snap', x: L.x, y: L.y, x2: e.x, y2: e.y, t: 0, d: 0.22 });
-    if (lv >= 5) {   // 绊马索：绷直的绳子横扫
-      for (const o of S.en) {
-        if (o.dead || o === e) continue;
-        const t = clamp(((o.x - L.x) * dx + (o.y - L.y) * dy) / (d * d), 0, 1), px = L.x + dx * t, py = L.y + dy * t;
-        if (Math.hypot(o.x - px, o.y - py) < 14 + o.r) { hit(o, dmg * 0.5, nx, ny, 160); if (!o.dead) cc(o, 1); }
+  lasso(lv, dt) {   // 套索：朝最密处抛出绳套，地上一个圈，1 秒后收紧把圈里的人全部击飞
+    const L = S.h, R = S.run;
+    R.cd.lasso = (R.cd.lasso || 0) - dt; if (R.cd.lasso > 0) return;
+    const near = S.en.filter(e => !e.dead && Math.abs(e.x - L.x) < 230 && Math.abs(e.y - L.y) < 230);
+    if (!near.length) return;
+    R.cd.lasso = (lv >= 4 ? 1.8 : 2.5) * runCdm();
+    const r = lv >= 3 ? 80 : 60, dmg = 35 * (lv >= 2 ? 1.3 : 1);
+    const used = [];
+    for (let q = 0; q < (lv >= 5 ? 2 : 1); q++) {
+      let best = null, bn = -1;
+      for (let k = 0; k < 12; k++) {
+        const c = near[(Math.random() * near.length) | 0];
+        if (used.some(u => Math.hypot(u.x - c.x, u.y - c.y) < r * 1.5)) continue;
+        let n = 0; for (const o of near) if (Math.abs(o.x - c.x) < r && Math.abs(o.y - c.y) < r) n++;
+        if (n > bn) { bn = n; best = c; }
       }
+      if (!best) break;
+      const lp = { x: best.x, y: best.y, r, t: 0, d: 1.0, dmg };
+      used.push(lp); R.loops.push(lp);
     }
-    hit(e, dmg, nx, ny, 560);
-    if (e.dead) e.missile = dmg * 0.5;
-    else if (e.type !== 'dar') { e.x += nx * 60; e.y += ny * 60; cc(e, 0.8); }
-    addNum(e.x, e.y - 24, '拽!', '#ffd860', false);
-    R.lasso = null; R.cd.lasso = (lv >= 4 ? 1.4 : 2) * runCdm();
   },
   calt(lv, dt) {   // 铁蒺藜：跑起来撒在马后
     const L = S.h, R = S.run;
@@ -355,10 +361,10 @@ const WEAP = {
       }
     }
   },
-  mace(lv, dt) {   // 铁锏：低速时砸一圈（被打时的反击在 runBlock）
+  mace(lv, dt) {   // 战锤：身边有敌人就砸（被打时的反击在 runBlock）
     const L = S.h, R = S.run;
     R.cd.mace = (R.cd.mace || 0) - dt;
-    if (ratio(L) < 0.3 && R.cd.mace <= 0 && anyNear(L.x, L.y, 80)) { maceSmash(lv); R.cd.mace = (lv >= 4 ? 0.7 : 1) * runCdm(); }
+    if (R.cd.mace <= 0 && anyNear(L.x, L.y, 100)) { maceSmash(lv); R.cd.mace = (lv >= 4 ? 1.1 : 1.6) * runCdm(); }
   },
   shield(lv, dt) {   // 骑兵小盾：充能（格挡在 runBlock）
     const R = S.run, cap = lv >= 4 ? 2 : 1;
@@ -679,6 +685,17 @@ function runDrawGround() {
     }
     ctx.globalAlpha = 1;
   }
+  for (const lp of R.loops) {   // 套索的圈
+    const p = P3(lp.x, lp.y, 0), k = lp.t / lp.d, r = lp.r * (1 - 0.25 * k);
+    ctx.save(); ctx.strokeStyle = '#d8b878'; ctx.lineWidth = 3; ctx.setLineDash([10, 6]); ctx.lineDashOffset = -S.t * 40;
+    ctx.beginPath(); ctx.ellipse(p[0], p[1], r, r * SQ, 0, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 0.15 + 0.25 * k; ctx.fillStyle = '#e8d090'; ctx.fill(); ctx.restore();
+  }
+  for (const w of R.waves) {   // 战锤冲击波
+    const p = P3(w.x, w.y, 0), k = w.r / w.max;
+    ctx.save(); ctx.globalAlpha = 0.7 * (1 - k) + 0.1; ctx.strokeStyle = w.stun ? '#ffe080' : '#c8b8a0'; ctx.lineWidth = 8 * (1 - k) + 2;
+    ctx.beginPath(); ctx.ellipse(p[0], p[1], w.r, w.r * SQ, 0, 0, TAU); ctx.stroke(); ctx.restore();
+  }
   for (const k of R.sticks) {   // 插在地上的标枪
     const a = P3(k.x, k.y, 0), b = P3(k.x - Math.cos(k.a) * 10, k.y - Math.sin(k.a) * 10, 26);
     ctx.globalAlpha = Math.min(1, k.t); ctx.strokeStyle = '#6a4a2a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
@@ -730,7 +747,8 @@ function runDrawFx() {
     if ((e.markU || 0) > S.t) { const p = P3(e.x, e.y, 0); ctx.strokeStyle = 'rgba(255,60,60,.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(p[0], p[1], e.r + 5, (e.r + 5) * SQ, 0, 0, TAU); ctx.stroke(); }
   }
   for (const s of R.shots) {
-    const a = Math.atan2(s.vy * SQ, s.vx), p = P3(s.x, s.y, 18);
+    const a = Math.atan2(s.vy * SQ, s.vx), p = P3(s.x, s.y, s.z !== undefined ? s.z : 18);
+    if (s.z !== undefined) shadow3(s.x, s.y, 8, 3, 0);
     ctx.save(); ctx.translate(p[0], p[1]);
     if (s.k === 'axe') {
       ctx.rotate(s.rot);
@@ -764,10 +782,13 @@ function runDrawFx() {
       ctx.save(); ctx.globalAlpha = k; ctx.lineCap = 'round';
       ctx.strokeStyle = 'rgba(255,240,200,.55)'; ctx.lineWidth = 9 * k + 2; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.restore();
-    } else if (f.k === 'sw') {
-      const c = Math.cos(f.a), s = Math.sin(f.a), L = S.h, pt = (fw, l) => P3(L.x + c * fw - s * l * f.sd, L.y + s * fw + c * l * f.sd, 20);
-      ctx.save(); ctx.globalAlpha = 0.9 * k; ctx.strokeStyle = '#eef4ff'; ctx.lineWidth = 6 * k + 1; ctx.lineCap = 'round';
-      ctx.beginPath(); for (let i = 0; i <= 8; i++) { const u = i / 8, p = pt(f.f1 - (f.f1 - f.f0) * u, 22 + Math.sin(u * Math.PI) * f.l); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); } ctx.stroke(); ctx.restore();
+    } else if (f.k === 'sw') {   // 大弯月刀光
+      const c = Math.cos(f.a), s = Math.sin(f.a), L = S.h, pt = (fw, l) => P3(L.x + c * fw - s * l * f.sd, L.y + s * fw + c * l * f.sd, 18);
+      ctx.save(); ctx.globalAlpha = 0.75 * k; ctx.fillStyle = '#f2f6ff';
+      ctx.beginPath();
+      for (let i = 0; i <= 12; i++) { const u = i / 12, p = pt(f.f1 - (f.f1 - f.f0) * u, 20 + Math.sin(u * Math.PI) * f.l); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }
+      for (let i = 12; i >= 0; i--) { const u = i / 12, p = pt(f.f1 - (f.f1 - f.f0) * u, 20 + Math.sin(u * Math.PI) * f.l * 0.55); ctx.lineTo(p[0], p[1]); }
+      ctx.closePath(); ctx.fill(); ctx.restore();
     } else if (f.k === 'arrows') {
       ctx.save(); ctx.globalAlpha = k; ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 1.5;
       for (let i = 0; i < 12; i++) { const x = p[0] + (hash(i, f.x | 0) - 0.5) * f.r * 1.6, y = p[1] + (hash(i + 7, f.y | 0) - 0.5) * f.r * SQ * 1.6; ctx.beginPath(); ctx.moveTo(x - 4, y - 30 * k - 8); ctx.lineTo(x, y - 30 * k + 8); ctx.stroke(); }
